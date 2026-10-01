@@ -1,0 +1,63 @@
+name: pdf-extractext
+
+# Bootstrap de infraestructura.
+# Arquitectura final: Traefik -> API -> {Extraction, Persistence} -> MongoDB.
+# Lo marcado PROVISIONAL es pendiente de equipo (docs/pending-decisions.md).
+
+services:
+  traefik:
+    image: traefik:v3
+    # PROVISIONAL: host, TLS y routing definitivos pendientes.
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "80:80"      # desarrollo local
+      - "8080:8080"  # dashboard inseguro, nunca producción
+    volumes:
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - services
+
+  extraction:
+    build: ${EXTRACTION_CONTEXT:?EXTRACTION_CONTEXT no definido — copiá .env.example a .env y ajustá la ruta al repo de Extraction}
+    image: pdf-extractext-extraction:bootstrap
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    expose:
+      - "8001" # solo red interna; réplicas/balanceo pendientes
+    networks:
+      - services
+
+  mongodb:
+    image: ${MONGO_IMAGE:?MONGO_IMAGE no definido — copiá .env.example a .env}
+    # Solo Persistence accede a MongoDB. 27017 no se publica al host.
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:?Falta en .env}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:?Falta en .env}
+    volumes:
+      - mongo_data:/data/db # volumen nombrado; jamás bind-mount versionado
+    networks:
+      - data
+    # Healthcheck técnico del contenedor; el health/readiness de los
+    # microservicios es pendiente de equipo.
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "-u", "${MONGO_INITDB_ROOT_USERNAME}", "-p", "${MONGO_INITDB_ROOT_PASSWORD}", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+networks:
+  services: # Traefik, API, Extraction (Persistence también irá acá)
+  data:     # MongoDB y solo quienes deban accederla (Persistence)
+
+volumes:
+  mongo_data:
+    name: pdf-extractext-mongo-data
