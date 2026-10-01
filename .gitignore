@@ -1,0 +1,10 @@
+# Secretos / entorno local — NUNCA versionar .env
+.env
+
+# Datos runtime (jamás bind-mount de Mongo versionado)
+mongodata/
+*-data/
+
+# Caches / SO
+.DS_Store
+*.log
