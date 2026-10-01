@@ -1,0 +1,18 @@
+# PROVISIONAL — host público, TLS y routing definitivos pendientes de equipo
+entryPoints:
+  web:
+    address: ":80"
+
+api:
+  # Dashboard inseguro: solo desarrollo, nunca producción.
+  insecure: true
+  dashboard: true
+
+providers:
+  docker:
+    exposedByDefault: false # los servicios se exponen solo con labels explícitos
+    network: pdf-extractext_services
+  file:
+    # Config dinámica (routers/middlewares/TLS futuros) en traefik/dynamic/.
+    directory: /etc/traefik/dynamic
+    watch: true
