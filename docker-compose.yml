@@ -32,6 +32,23 @@ services:
     networks:
       - services
 
+  persistence:
+    build: ${PERSISTENCE_CONTEXT:?PERSISTENCE_CONTEXT no definido — copiá .env.example a .env y ajustá la ruta al repo de Persistence}
+    image: pdf-extractext-persistence:bootstrap
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    expose:
+      - "8002" # solo red interna
+    environment:
+      MONGO_URI: mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongodb:27017
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - services
+      - data # único servicio con acceso a MongoDB
+
   mongodb:
     image: ${MONGO_IMAGE:?MONGO_IMAGE no definido — copiá .env.example a .env}
     # Solo Persistence accede a MongoDB. 27017 no se publica al host.
@@ -55,8 +72,8 @@ services:
       start_period: 15s
 
 networks:
-  services: # Traefik, API, Extraction (Persistence también irá acá)
-  data:     # MongoDB y solo quienes deban accederla (Persistence)
+  services: # Traefik, API, Extraction, Persistence
+  data:     # MongoDB y quienes acceden a sus datos (Persistence)
 
 volumes:
   mongo_data:
