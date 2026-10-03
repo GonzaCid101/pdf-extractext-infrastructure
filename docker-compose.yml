@@ -1,40 +1,54 @@
 name: pdf-extractext
 
-# Bootstrap de infraestructura.
-# Arquitectura final: Traefik -> API -> {Extraction, Persistence} -> MongoDB.
-# Lo marcado PROVISIONAL es pendiente de equipo (docs/pending-decisions.md).
+# Infraestructura de PDF Extractext.
+# Arquitectura: Traefik -> API -> {Extraction, Persistence} -> MongoDB.
+# Decisiones: docs/architecture-decisions.md
 
 services:
   traefik:
     image: traefik:v3
-    # PROVISIONAL: host, TLS y routing definitivos pendientes.
+    # TLS local con mkcert (D1-D2): :80 redirige a :443; entrypoint interno
+    # :8090 solo red, no publicado (tráfico servicio→servicio, D3).
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
     ports:
-      - "80:80"      # desarrollo local
-      - "8080:8080"  # dashboard inseguro, nunca producción
+      - "80:80"
+      - "443:443"
     volumes:
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      - ./traefik/certs:/etc/certs:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - services
 
   extraction:
     build: ${EXTRACTION_CONTEXT:?EXTRACTION_CONTEXT no definido — copiá .env.example a .env y ajustá la ruta al repo de Extraction}
-    image: pdf-extractext-extraction:bootstrap
+    image: pdf-extractext-extraction:${EXTRACTION_TAG:-dev}
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
     expose:
-      - "8001" # solo red interna; réplicas/balanceo pendientes
+      - "8001" # solo red interna
+    # Router interno (entrypoint :8090, no público): Traefik balancea réplicas (D3).
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.extraction.rule=Host(`extraction.pdf-extractext.localhost`)
+      - traefik.http.routers.extraction.entrypoints=internal
+      - traefik.http.services.extraction.loadbalancer.server.port=8001
+    deploy:
+      replicas: 1 # TP admite hasta 5; Traefik balancea (D3/D9)
+      resources:
+        limits: # exigencia del TP (D9)
+          cpus: "1.0"
+          memory: 1G
     networks:
       - services
 
   persistence:
     build: ${PERSISTENCE_CONTEXT:?PERSISTENCE_CONTEXT no definido — copiá .env.example a .env y ajustá la ruta al repo de Persistence}
-    image: pdf-extractext-persistence:bootstrap
+    image: pdf-extractext-persistence:${PERSISTENCE_TAG:-dev}
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
