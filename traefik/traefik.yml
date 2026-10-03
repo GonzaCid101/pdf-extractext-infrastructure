@@ -1,18 +1,35 @@
-# PROVISIONAL — host público, TLS y routing definitivos pendientes de equipo
+# Config estática de Traefik — patrón del repo docente adaptado
+# (ver docs/architecture-decisions.md D1-D3).
+global:
+  sendAnonymousUsage: false
+
 entryPoints:
-  web:
+  http:
     address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: https
+          scheme: https
+  https:
+    address: ":443"
+  internal:
+    # Tráfico interno servicio→servicio (API → Extraction). No se publica al host.
+    address: ":8090"
 
 api:
-  # Dashboard inseguro: solo desarrollo, nunca producción.
-  insecure: true
   dashboard: true
 
 providers:
   docker:
+    endpoint: "unix:///var/run/docker.sock"
+    watch: true
     exposedByDefault: false # los servicios se exponen solo con labels explícitos
     network: pdf-extractext_services
   file:
-    # Config dinámica (routers/middlewares/TLS futuros) en traefik/dynamic/.
+    # Config dinámica (routers/middlewares/TLS) en traefik/dynamic/.
     directory: /etc/traefik/dynamic
     watch: true
+
+log:
+  level: INFO

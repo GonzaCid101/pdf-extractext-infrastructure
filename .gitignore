@@ -8,3 +8,6 @@ mongodata/
 # Caches / SO
 .DS_Store
 *.log
+
+# Certificados TLS locales (mkcert) — cada dev genera los suyos, nunca versionar
+traefik/certs/

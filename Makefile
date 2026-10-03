@@ -1,6 +1,18 @@
 COMPOSE := docker compose
+DOMAIN  := pdf-extractext.localhost
 
-.PHONY: check up down build logs ps smoke
+.PHONY: check certs up down build logs ps smoke
+
+# certs genera el certificado TLS local con mkcert (nunca versionar).
+certs:
+	@command -v mkcert >/dev/null || { echo "ERROR: falta mkcert — https://github.com/FiloSottile/mkcert#installation"; \
+		echo "       Si descargás el binario suelto, ubicarlo en el PATH, p. ej.:"; \
+		echo "       install mkcert ~/.local/bin/   (o /usr/local/bin/ con sudo)"; exit 1; }
+	mkcert -install
+	@mkdir -p traefik/certs
+	mkcert -cert-file traefik/certs/cert.pem -key-file traefik/certs/key.pem \
+		$(DOMAIN) "*.$(DOMAIN)"
+	@echo "Certs generados en traefik/certs/ para $(DOMAIN)"
 
 # check falla con mensaje claro si falta .env o algún contexto de build.
 check:

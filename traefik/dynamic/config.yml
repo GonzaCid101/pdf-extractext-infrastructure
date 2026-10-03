@@ -1,0 +1,14 @@
+# Config dinámica de Traefik: router del dashboard y certificados TLS (mkcert).
+# Los routers de servicios se definen por labels docker en docker-compose.yml.
+http:
+  routers:
+    traefik-dashboard:
+      rule: "Host(`traefik.pdf-extractext.localhost`)"
+      service: "api@internal"
+      entryPoints: ["https"]
+      tls: {}
+
+tls:
+  certificates:
+    - certFile: "/etc/certs/cert.pem"
+      keyFile: "/etc/certs/key.pem"
