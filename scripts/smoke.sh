@@ -43,12 +43,12 @@ wait_mongo_healthy() {
   done
   return 1
 }
-wait_url http://localhost:8080/api/overview || true
+wait_url -k https://traefik.pdf-extractext.localhost/api/overview || true
 wait_mongo_healthy || true
 
-# 2) Traefik responde (dashboard local PROVISIONAL)
-code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:8080/api/overview || echo 000)
-[ "$code" = "200" ] && ok "2. Traefik responde (dashboard local)" \
+# 2) Traefik responde (dashboard con TLS local, dominio interno)
+code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 5 https://traefik.pdf-extractext.localhost/api/overview || echo 000)
+[ "$code" = "200" ] && ok "2. Traefik responde (dashboard TLS)" \
                     || fail "2. Traefik no responde (HTTP $code)"
 
 # 3) MongoDB pasa su healthcheck
@@ -60,11 +60,17 @@ status=$(docker inspect -f '{{.State.Health.Status}}' pdf-extractext-mongodb-1 2
 $COMPOSE ps --status running --services | grep -qx extraction \
   && ok "4. Extraction running" || fail "4. Extraction no está running"
 
-# 5) Extraction responde GET /health desde la red interna (contenedor efímero)
-code=$(docker run --rm --network "$NET_SERVICES" "$CURL_IMG" \
+# 5) Extraction responde GET /health: directo y vía Traefik interno (:8090)
+c1=$(docker run --rm --network "$NET_SERVICES" "$CURL_IMG" \
   -s -o /dev/null -w '%{http_code}' --max-time 5 http://extraction:8001/health || echo 000)
-[ "$code" = "200" ] && ok "5. Extraction /health 200 en red interna" \
-                    || fail "5. Extraction /health en red interna: HTTP $code"
+c2=$(docker run --rm --network "$NET_SERVICES" "$CURL_IMG" \
+  -s -o /dev/null -w '%{http_code}' --max-time 5 \
+  -H "Host: extraction.pdf-extractext.localhost" http://traefik:8090/health || echo 000)
+if [ "$c1" = "200" ] && [ "$c2" = "200" ]; then
+  ok "5. Extraction /health 200 (directo y vía Traefik interno)"
+else
+  fail "5. Extraction /health en red interna (directo: $c1, traefik interno: $c2)"
+fi
 
 # 6) Extraction NO responde desde el host ni vía Traefik público (:80)
 c1=$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 http://localhost:8001/health || echo 000)
@@ -130,9 +136,10 @@ else
   fail "11. el documento de prueba no persistió (count=$found)"
 fi
 
-# 12) No hay .env ni datos runtime versionados
+# 12) No hay .env, certs TLS ni datos runtime versionados
 dirty=0
 git ls-files --error-unmatch .env >/dev/null 2>&1 && { dirty=1; echo "     .env está versionado"; }
+git ls-files | grep -Eq '\.pem$' && { dirty=1; echo "     hay certificados/claves TLS versionados"; }
 git ls-files | grep -Eq '(^|/)(mongodata|.*-data)/' && { dirty=1; echo "     hay datos runtime versionados"; }
 [ "$dirty" = "0" ] && ok "12. cero secretos/datos versionados" \
                    || fail "12. hay secretos o datos runtime versionados"
