@@ -8,6 +8,7 @@ el repo está marcado **PROVISIONAL**.
    desarrollo. Nunca llevar `api.insecure` a producción.
 2. **Health/readiness de los microservicios** (rutas, `depends_on`). El
    healthcheck de Mongo es solo verificación operativa del contenedor.
+   Parcialmente aplicada: Persistence ya usa `depends_on: service_healthy`.
 3. **Balanceo/discovery de Extraction y destino lógico API→réplicas.**
    Capacidad futura (`--scale`), no implementada. Alternativas detectadas
    (del repo de referencia de la cátedra), ambas **PENDIENTES**:
@@ -20,9 +21,12 @@ el repo está marcado **PROVISIONAL**.
       de retry/circuit breaker entrarían en conflicto con los retries de API.
 4. **Comportamiento 429/503 ante saturación.**
 5. **Valores de CPU/memoria** (límites de recursos).
-6. **Versión de MongoDB.** El tag en `MONGO_IMAGE` es provisional.
-7. **Repos hermanos vs imágenes construidas/publicadas.** Hoy:
-   `EXTRACTION_CONTEXT` apunta al repo hermano (solución local simple).
+6. ~~**Versión de MongoDB.**~~ **RESUELTA**: `mongo:8` es la versión
+   definitiva. Pendiente de coordinación: alinear los tests de integración
+   de Persistence (hoy fijados en `mongo:7.0`).
+7. ~~**Repos hermanos vs imágenes construidas/publicadas.**~~ **RESUELTA**:
+   build desde repos hermanos (`EXTRACTION_CONTEXT`, `PERSISTENCE_CONTEXT`)
+   es la forma definitiva para desarrollo local.
 8. **Entorno de carga:** k6 / Vegeta / PDFs de prueba.
 9. **Herramientas adicionales.** Si Bash/Make no alcanzan, se evalúa en una
    Issue antes de agregar nada.
