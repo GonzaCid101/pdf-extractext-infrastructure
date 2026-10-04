@@ -72,6 +72,30 @@ para que las llamadas servicio→servicio HTTP funcionen sin certificados.
     documento temporal directo en Mongo: es solo una prueba de infraestructura.
 12. No hay `.env`, certs TLS ni datos runtime versionados.
 
+## Registro de corridas
+
+Las corridas de carga (k6/Vegeta, ver D11 del ADR) se registran en
+`docs/test-runs/` con formato fijo ([TEMPLATE.md](docs/test-runs/TEMPLATE.md))
+para que sean comparables entre sí.
+
+`make record-run` extrae automáticamente del stack activo réplicas, tags de
+imagen, límites CPU/mem y versiones de Traefik/Mongo; los parámetros y
+resultados de la corrida se pasan como flags via `ARGS`:
+
+```bash
+make up
+# ... correr k6 o vegeta contra el stack ...
+make record-run ARGS="--tool k6 \
+  --target http://traefik:8090 --desc 'Spike D11' \
+  --load 'k6 spike 100 VUs' \
+  --throughput 98.2 --success 99.7 --p50 42 --p90 120 --p95 210"
+```
+
+Genera `docs/test-runs/<fechaUTC>-<tool>.md` (p. ej.
+`20261004T153012Z-k6.md`). Lo único que queda para completar a mano es la
+sección Observaciones. Detalle de flags:
+`./scripts/record-run.sh --help`.
+
 ## Reglas del bootstrap
 
 - Solo Persistence accederá a MongoDB (aislamiento por redes).

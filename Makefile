@@ -1,7 +1,7 @@
 COMPOSE := docker compose
 DOMAIN  := pdf-extractext.localhost
 
-.PHONY: check certs up down build logs ps smoke
+.PHONY: check certs up down build logs ps smoke record-run
 
 # certs genera el certificado TLS local con mkcert (nunca versionar).
 certs:
@@ -43,3 +43,9 @@ ps:
 
 smoke: check
 	bash scripts/smoke.sh
+
+# record-run genera docs/test-runs/<fechaUTC>-<tool>.md con la config real del
+# stack activo. Parámetros y resultados se pasan como flags via ARGS, ej.:
+#   make record-run ARGS="--tool k6 --target http://traefik:8090 --load 'abierto 25 req/s' --throughput 98.2 --success 99.7 --p50 42 --p90 120 --p95 210"
+record-run:
+	./scripts/record-run.sh $(ARGS)
