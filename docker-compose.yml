@@ -23,6 +23,34 @@ services:
     networks:
       - services
 
+  api:
+    build: ${API_CONTEXT:?API_CONTEXT no definido — copiá .env.example a .env y ajustá la ruta al repo de API}
+    image: pdf-extractext-api:${API_TAG:-dev}
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    expose:
+      - "8000" # entrypoint público vía Traefik; no se publica al host
+    environment:
+      # EXTRACTION_URL apunta al entrypoint interno :8090 de Traefik (D3):
+      # ahí Traefik balancea las réplicas de Extraction (D9).
+      EXTRACTION_URL: http://traefik:8090
+      PERSISTENCE_URL: http://persistence:8002
+      MAX_FILE_SIZE_MB: "50"
+    depends_on:
+      - traefik
+      - persistence
+    # Entrypoint público (D15): HTTPS con mkcert. El redirect 80→443 ya es
+    # global en la config estática (traefik.yml), no requiere router extra.
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.api.rule=Host(`pdf-extractext.localhost`)
+      - traefik.http.routers.api.entrypoints=https
+      - traefik.http.routers.api.tls=true
+      - traefik.http.services.api.loadbalancer.server.port=8000
+    networks:
+      - services # sin acceso a `data` (solo Persistence habla con MongoDB)
+
   extraction:
     build: ${EXTRACTION_CONTEXT:?EXTRACTION_CONTEXT no definido — copiá .env.example a .env y ajustá la ruta al repo de Extraction}
     image: pdf-extractext-extraction:${EXTRACTION_TAG:-dev}

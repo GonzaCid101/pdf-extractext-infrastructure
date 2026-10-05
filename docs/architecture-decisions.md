@@ -80,7 +80,8 @@ repos de los servicios.
 ## Coordinación (se implementan en otros repos)
 
 ### D14. Contrato de Extraction: manda el TP del docente
-- Entrada: multipart/form-data **o** binario directo en el body.
+- Entrada: **únicamente** multipart/form-data (decisión del equipo; se
+  descarta binario directo / `application/octet-stream`).
 - Salida 200: `{"content": "...", "page_count": N}`.
 - API (Bruno) ya lo implementa; Extraction (Manu) ajusta sus issues #2 y #5.
 - **Pregunta abierta del equipo:** quién calcula el SHA-256 que Persistence
@@ -88,8 +89,15 @@ repos de los servicios.
   Extraction lo sigue calculando (campo extra en la respuesta) o lo calcula
   API. A resolver en sync del equipo.
 
-### D15. API Service en el compose
-- Bloqueada hasta que el repo de API tenga Dockerfile, `GET /health`,
-  puerto 8000 y `MAX_FILE_SIZE_MB=50` (comunicado a Bruno).
-- Cuando exista: red `services`, router público `Host(pdf-extractext.localhost)`
-  con TLS y redirect; env `EXTRACTION_URL`, `PERSISTENCE_URL` (ver D3).
+### D15. API Service en el compose (✅ RESUELTA)
+- El servicio `api` se construye desde `API_CONTEXT` (repo hermano) con tag
+  `API_TAG`; red `services` únicamente (sin acceso a `data`); expone `:8000`
+  solo a la red interna (no publicado al host).
+- Env inyectadas: `EXTRACTION_URL=http://traefik:8090` (entrypoint interno,
+  ver D3), `PERSISTENCE_URL=http://persistence:8002`, `MAX_FILE_SIZE_MB=50`.
+- Router público `Host(pdf-extractext.localhost)` en entrypoint `https` con
+  TLS (mkcert). La redirección :80→:443 ya es global en la config estática,
+  por lo que no se define un router HTTP redundante.
+- **Restricción contractual:** Extraction acepta **solo** `multipart/form-data`
+  (no `application/octet-stream` ni binario directo). La API reenvía el
+  archivo en ese formato (ver D14).

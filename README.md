@@ -7,27 +7,29 @@ microservicios).
 
 ```
 Traefik (:80→:443 TLS mkcert, dominio *.pdf-extractext.localhost)
-        ▼  red `services`          :8090 entrypoint interno (no publicado)
-   Extraction (:8001, /health) ◀── balanceo de réplicas vía Traefik
-   Persistence (:8002, /health) ─┐
-                                 ▼  red `data`
+        ▼  red `services`
+   API (:8000, entrypoint público HTTPS)
+        ├─ Persistence (:8002, /health) ─┐
+        └─ Traefik :8090 (entrypoint interno, no publicado)
+                 ▼  balanceo de réplicas vía Traefik
+           Extraction (:8001, /health)
+                                        ▼  red `data`
 MongoDB  ◀─ solo Persistence; 27017 no publicado; volumen nombrado
 ```
 
-Levanta **Traefik + Extraction + Persistence + MongoDB** sobre la arquitectura
-acordada: `Traefik → API → {Extraction, Persistence} → MongoDB`.
-
-El repo de API existe pero aún no se integra (le falta Dockerfile/health;
-ver `docs/architecture-decisions.md` D15). Cuando esté listo, se agrega al
-compose en la red `services` con router TLS propio.
+Levanta **Traefik + API + Extraction + Persistence + MongoDB** sobre la
+arquitectura acordada: `Traefik → API → {Extraction, Persistence} → MongoDB`.
+La API es el único entrypoint público (`https://pdf-extractext.localhost`);
+consume Extraction a través del entrypoint interno :8090 de Traefik (D3) y
+Persistence directo por la red `services`.
 
 ## Requisitos
 
 - Docker + Docker Compose v2, Make, Bash, curl, mkcert (si usás el binario
   suelto, ubicarlo en el PATH, p. ej. `~/.local/bin`)
-- Repos de Extraction y Persistence clonados como hermanos (ver
-  `docs/architecture-decisions.md`): `../pdf-extractext-extractor` y
-  `../pdf-extractext-persistence`
+- Repos de API, Extraction y Persistence clonados como hermanos (ver
+  `docs/architecture-decisions.md`): `../pdf-extractext-api`,
+  `../pdf-extractext-extractor` y `../pdf-extractext-persistence`
 
 ## Quickstart
 
@@ -49,12 +51,16 @@ mensaje que explica cómo resolverlo.
 
 | Dominio | Destino | Entrypoint |
 | --- | --- | --- |
+| `pdf-extractext.localhost` | API Service | :443 (TLS) |
 | `traefik.pdf-extractext.localhost` | dashboard Traefik | :443 (TLS) |
 | `extraction.pdf-extractext.localhost` | réplicas de Extraction | interno :8090 (no publicado al host) |
-| `pdf-extractext.localhost` | API Service (cuando se integre) | :443 (TLS) |
 
 El redirect :80→:443 aplica solo al borde; el entrypoint interno no redirige
 para que las llamadas servicio→servicio HTTP funcionen sin certificados.
+
+**Contrato de Extraction:** el servicio acepta **únicamente
+`multipart/form-data`**; no acepta `application/octet-stream` ni binarios
+crudos en el body. La API debe reenviar el archivo respetando ese formato.
 
 ## Comprobaciones de `make smoke`
 
