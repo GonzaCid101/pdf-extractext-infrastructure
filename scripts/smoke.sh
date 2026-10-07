@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
-# Smoke tests del bootstrap: servicios arriba, aislamiento por redes,
-# persistencia del volumen e higiene del repo.
+# Smoke tests del bootstrap: servicios arriba, flujo funcional E2E de
+# POST /extract, aislamiento por redes, persistencia del volumen e
+# higiene del repo.
 set -euo pipefail
 export COMPOSE_PROGRESS=plain
 cd "$(dirname "$0")/.."
+
+# jq valida el contrato JSON del smoke funcional de POST /extract.
+command -v jq >/dev/null 2>&1 \
+  || { echo "ERROR: falta jq — requerido para validar la respuesta de /extract"; exit 1; }
 
 COMPOSE="docker compose"
 CURL_IMG="curlimages/curl:8.10.1"
@@ -18,11 +23,11 @@ set -a; . ./.env; set +a
 
 echo "== Smoke tests: bootstrap pdf-extractext =="
 
-# 1) compose up termina con los 4 servicios arriba
+# 1) compose up termina con los 5 servicios arriba
 $COMPOSE up -d --build >/dev/null
 UP=$($COMPOSE ps --status running --format '{{.Service}}' | sort | tr '\n' ' ')
-if [ "$UP" = "extraction mongodb persistence traefik " ]; then
-  ok "1. los 4 servicios están running"
+if [ "$UP" = "api extraction mongodb persistence traefik " ]; then
+  ok "1. los 5 servicios están running"
 else
   fail "1. servicios running inesperados: [$UP]"
 fi
@@ -96,25 +101,93 @@ else
   fail "8. Persistence expuesto indebidamente (host: $c1, traefik:80: $c2)"
 fi
 
-# 9) MongoDB NO es alcanzable desde el host ni desde la red de servicios
+# --- Smoke funcional E2E de POST /extract (dominio público) ---
+
+# Fixture PDF mínimo (1 página, con texto) generado al vuelo: offsets y
+# tabla xref reales para que cualquier parser lo acepte. Vive en un tmpdir
+# que se limpia al salir; no deja archivos versionables en el repo.
+fixture_pdf() { # salida
+  local out=$1 i xref
+  local stream='BT /F1 12 Tf 72 720 Td (pdf-extractext smoke test) Tj ET'
+  local -a off=()
+  : > "$out"
+  printf '%%PDF-1.4\n' >> "$out"
+  off[1]=$(( $(wc -c < "$out") ))
+  printf '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n' >> "$out"
+  off[2]=$(( $(wc -c < "$out") ))
+  printf '2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n' >> "$out"
+  off[3]=$(( $(wc -c < "$out") ))
+  printf '3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>\nendobj\n' >> "$out"
+  off[4]=$(( $(wc -c < "$out") ))
+  printf '4 0 obj\n<< /Length %d >>\nstream\n%s\nendstream\nendobj\n' "$((${#stream} + 1))" "$stream" >> "$out"
+  off[5]=$(( $(wc -c < "$out") ))
+  printf '5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n' >> "$out"
+  xref=$(( $(wc -c < "$out") ))
+  printf 'xref\n0 6\n0000000000 65535 f \n' >> "$out"
+  for i in 1 2 3 4 5; do
+    printf '%010d 00000 n \n' "${off[$i]}" >> "$out"
+  done
+  printf 'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n' "$xref" >> "$out"
+}
+
+# Ventana de arranque de la API: el smoke E2E no debe fallar por flakiness
+# de boot. No es una aserción: quien falla son los checks 9 y 10.
+wait_api_200() { # url
+  local c
+  for _ in $(seq 1 30); do
+    c=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 3 "$1" || echo 000)
+    [ "$c" = "200" ] && return 0
+    sleep 2
+  done
+  return 1
+}
+
+SMOKE_TMP=$(mktemp -d)
+trap 'rm -rf "$SMOKE_TMP"' EXIT
+FIXTURE="$SMOKE_TMP/fixture.pdf"
+fixture_pdf "$FIXTURE"
+wait_api_200 https://pdf-extractext.localhost/ || true
+
+# 9) Flujo feliz: POST /extract vía https://pdf-extractext.localhost con el
+#    PDF de prueba en el campo multipart "file". Contrato del TP: HTTP 200 y
+#    JSON con las claves content y page_count.
+#    (`|| true`: curl ya escribe 000 con -w si falla; evita duplicarlo.)
+code=$(curl -sk -o "$SMOKE_TMP/extract-ok.json" -w '%{http_code}' --max-time 30 \
+  -F "file=@${FIXTURE}" https://pdf-extractext.localhost/extract || true)
+: "${code:=000}"
+if [ "$code" = "200" ] && jq -e 'has("content") and has("page_count")' "$SMOKE_TMP/extract-ok.json" >/dev/null 2>&1; then
+  ok "9. POST /extract con PDF: 200 con content y page_count"
+else
+  fail "9. POST /extract con PDF: HTTP $code (esperaba 200 con content y page_count), cuerpo: $(head -c 300 "$SMOKE_TMP/extract-ok.json" 2>/dev/null || echo '<vacío>')"
+fi
+
+# 10) Flujo inválido: mismo POST con el campo con nombre incorrecto (sin
+#     "file"). La API debe rechazar con exactamente 400 sin tocar Extraction.
+code=$(curl -sk -o "$SMOKE_TMP/extract-err.json" -w '%{http_code}' --max-time 30 \
+  -F "otro-campo=@${FIXTURE}" https://pdf-extractext.localhost/extract || true)
+: "${code:=000}"
+[ "$code" = "400" ] && ok "10. POST /extract sin campo file: HTTP 400 (rechazo correcto)" \
+                    || fail "10. POST /extract sin campo file: HTTP $code (esperaba exactamente 400), cuerpo: $(head -c 300 "$SMOKE_TMP/extract-err.json" 2>/dev/null)"
+
+# 11) MongoDB NO es alcanzable desde el host ni desde la red de servicios
 c1=0; nc -z -w 2 localhost 27017 2>/dev/null && c1=1
 c2=0; docker run --rm --network "$NET_SERVICES" "$CURL_IMG" \
   -s --max-time 3 -o /dev/null telnet://mongodb:27017 2>/dev/null && c2=1
 if [ "$c1" = "0" ] && [ "$c2" = "0" ]; then
-  ok "9. MongoDB aislado (host y red de servicios)"
+  ok "11. MongoDB aislado (host y red de servicios)"
 else
-  fail "9. MongoDB alcanzable (host: $c1, red servicios: $c2)"
+  fail "11. MongoDB alcanzable (host: $c1, red servicios: $c2)"
 fi
 
-# 10) Persistence es dueño del índice único checksum_1
+# 12) Persistence es dueño del índice único checksum_1
 indexes=$(docker exec pdf-extractext-mongodb-1 mongosh --quiet \
   -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" \
   --authenticationDatabase admin pdf_extractext \
   --eval 'db.pdf_documents.getIndexes().filter(i => i.name === "checksum_1" && i.unique === true).length')
-[ "$indexes" = "1" ] && ok "10. índice único checksum_1 creado por Persistence" \
-                     || fail "10. índice checksum_1 no encontrado o no único (match: $indexes)"
+[ "$indexes" = "1" ] && ok "12. índice único checksum_1 creado por Persistence" \
+                      || fail "12. índice checksum_1 no encontrado o no único (match: $indexes)"
 
-# 11) down && up conserva los datos de Mongo (volumen nombrado).
+# 13) down && up conserva los datos de Mongo (volumen nombrado).
 #    Inserta/limpia un doc temporal directo en Mongo (prueba de infra:
 #    no depende del CRUD de Persistence).
 MARKER="smoke-$(date +%s)"
@@ -131,18 +204,18 @@ done
 found=$(MONGO smoke --eval "db.markers.countDocuments({marker: '$MARKER'})" | tail -n1)
 MONGO smoke --eval "db.markers.deleteMany({})" >/dev/null
 if [ "$found" = "1" ]; then
-  ok "11. datos persistieron tras down/up (volumen nombrado)"
+  ok "13. datos persistieron tras down/up (volumen nombrado)"
 else
-  fail "11. el documento de prueba no persistió (count=$found)"
+  fail "13. el documento de prueba no persistió (count=$found)"
 fi
 
-# 12) No hay .env, certs TLS ni datos runtime versionados
+# 14) No hay .env, certs TLS ni datos runtime versionados
 dirty=0
 git ls-files --error-unmatch .env >/dev/null 2>&1 && { dirty=1; echo "     .env está versionado"; }
 git ls-files | grep -Eq '\.pem$' && { dirty=1; echo "     hay certificados/claves TLS versionados"; }
 git ls-files | grep -Eq '(^|/)(mongodata|.*-data)/' && { dirty=1; echo "     hay datos runtime versionados"; }
-[ "$dirty" = "0" ] && ok "12. cero secretos/datos versionados" \
-                   || fail "12. hay secretos o datos runtime versionados"
+[ "$dirty" = "0" ] && ok "14. cero secretos/datos versionados" \
+                    || fail "14. hay secretos o datos runtime versionados"
 
 echo
 if [ "$FAILURES" = "0" ]; then

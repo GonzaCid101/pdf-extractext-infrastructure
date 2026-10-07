@@ -37,7 +37,7 @@ Persistence directo por la red `services`.
 cp .env.example .env   # ajustá *_CONTEXT si tus rutas difieren
 make certs             # genera el TLS local con mkcert (una vez por máquina)
 make up                # valida los contextos de build y levanta todo
-make smoke             # verifica los 12 checks
+make smoke             # verifica los 14 checks
 make down
 make logs / make ps    # utilidades
 ```
@@ -64,7 +64,7 @@ crudos en el body. La API debe reenviar el archivo respetando ese formato.
 
 ## Comprobaciones de `make smoke`
 
-1. Los 4 servicios quedan running tras `compose up --build`.
+1. Los 5 servicios quedan running tras `compose up --build`.
 2. Traefik responde (dashboard con TLS local).
 3. MongoDB pasa su healthcheck técnico de contenedor.
 4. Extraction está running.
@@ -72,11 +72,16 @@ crudos en el body. La API debe reenviar el archivo respetando ese formato.
 6. Extraction **no** es alcanzable desde el host ni vía Traefik público.
 7. Persistence responde `GET /health` desde la red interna.
 8. Persistence **no** es alcanzable desde el host ni vía Traefik público.
-9. MongoDB **no** es alcanzable desde el host ni desde la red de servicios.
-10. Persistence garantizó el índice único `checksum_1` en Mongo (ownership).
-11. `down && up` conserva los datos de Mongo. La prueba inserta y limpia un
+9. Flujo feliz de `POST /extract` por el dominio público: un PDF mínimo
+   generado al vuelo viaja por `multipart/form-data` (campo `file`) y la
+   respuesta debe ser HTTP 200 con `content` y `page_count` (contrato del TP).
+10. `POST /extract` sin el campo `file` (nombre incorrecto) se rechaza con
+    HTTP 400.
+11. MongoDB **no** es alcanzable desde el host ni desde la red de servicios.
+12. Persistence garantizó el índice único `checksum_1` en Mongo (ownership).
+13. `down && up` conserva los datos de Mongo. La prueba inserta y limpia un
     documento temporal directo en Mongo: es solo una prueba de infraestructura.
-12. No hay `.env`, certs TLS ni datos runtime versionados.
+14. No hay `.env`, certs TLS ni datos runtime versionados.
 
 ## Registro de corridas
 
