@@ -15,6 +15,7 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      - "8090:8090"
     volumes:
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./traefik/dynamic:/etc/traefik/dynamic:ro
@@ -59,6 +60,12 @@ services:
       - no-new-privileges:true
     expose:
       - "8001" # solo red interna
+    environment:
+      # Tunables de concurrencia parametrizados (Issue #9). Defaults medidos:
+      # 1 worker / 1 slot es el óptimo bajo 1 CPU/1GB (ver docs/performance del repo).
+      WEB_CONCURRENCY: ${EXTRACTION_WORKERS:-1}
+      MAX_CONCURRENCY: ${EXTRACTION_MAX_CONCURRENCY:-1}
+      RETRY_AFTER_SECONDS: ${EXTRACTION_RETRY_AFTER_SECONDS:-1}
     # Router interno (entrypoint :8090, no público): Traefik balancea réplicas (D3).
     labels:
       - traefik.enable=true
