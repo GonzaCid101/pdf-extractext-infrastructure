@@ -39,8 +39,12 @@ services:
       PERSISTENCE_URL: http://persistence:8002
       MAX_FILE_SIZE_MB: "50"
     depends_on:
-      - traefik
-      - persistence
+      extraction:
+        condition: service_healthy
+      persistence:
+        condition: service_healthy
+      traefik:
+        condition: service_started # No healthcheck para Traefik, así que sólo started.
     # Entrypoint público (D15): HTTPS con mkcert. El redirect 80→443 ya es
     # global en la config estática (traefik.yml), no requiere router extra.
     labels:
@@ -80,6 +84,12 @@ services:
           memory: 1G
     networks:
       - services
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8001/readyz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   persistence:
     build: ${PERSISTENCE_CONTEXT:?PERSISTENCE_CONTEXT no definido — copiá .env.example a .env y ajustá la ruta al repo de Persistence}
@@ -97,6 +107,12 @@ services:
     networks:
       - services
       - data # único servicio con acceso a MongoDB
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8002/readyz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   mongodb:
     image: ${MONGO_IMAGE:?MONGO_IMAGE no definido — copiá .env.example a .env}

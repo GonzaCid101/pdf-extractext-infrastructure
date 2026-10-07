@@ -52,9 +52,8 @@ repos de los servicios.
 
 ### D8. Healthchecks
 - `depends_on: service_healthy` solo donde existe healthcheck (Mongo).
-- Los servicios aplicación usan imágenes distroless (sin shell/curl): no
-  pueden tener healthcheck in-container. Diferido hasta que los servicios
-  expongan `/readyz` y se decida la verificación (issue a crear).
+- **Decisión:** Se implementan healthchecks in-container (CMD-SHELL con `curl -f http://localhost:<PUERTO>/readyz`) para `extraction` y `persistence`. El servicio `api` ahora depende de su `condition: service_healthy` para un arranque ordenado. Traefik, por defecto, excluye automáticamente del balanceo a las réplicas unhealthy.
+- **Contexto:** Los microservicios ahora exponen `/readyz`. Para garantizar la orquestación de arranque y el balanceo correcto en Traefik, se habilitan estos healthchecks.
 
 ### D9. Límites de recursos
 - Extraction: `cpus: '1.0'`, `memory: 1G` por réplica (exigencia del TP).
