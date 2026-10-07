@@ -1,7 +1,7 @@
 COMPOSE := docker compose
 DOMAIN  := pdf-extractext.localhost
 
-.PHONY: check certs up down build logs ps smoke record-run
+.PHONY: check certs up down build logs ps smoke record-run load-k6 load-vegeta
 
 # certs genera el certificado TLS local con mkcert (nunca versionar).
 certs:
@@ -43,6 +43,16 @@ ps:
 
 smoke: check
 	bash scripts/smoke.sh
+
+# Pruebas de carga (Issue #4 / ADR D11): k6 spike y Vegeta 50 req/s × 30s.
+# Ambas corren contra https://pdf-extractext.localhost/extract y registran
+# la corrida en docs/test-runs/ con la config real del stack (record-run.sh).
+# RECORD=0 corre el ataque como ensayo sin registrar (p. ej. contra un mock).
+load-k6: check
+	bash tests/load/run_k6.sh
+
+load-vegeta: check
+	bash tests/load/vegeta/run_vegeta.sh
 
 # record-run genera docs/test-runs/<fechaUTC>-<tool>.md con la config real del
 # stack activo. Parámetros y resultados se pasan como flags via ARGS, ej.:

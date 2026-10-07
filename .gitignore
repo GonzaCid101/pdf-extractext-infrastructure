@@ -11,3 +11,6 @@ mongodata/
 
 # Certificados TLS locales (mkcert) — cada dev genera los suyos, nunca versionar
 traefik/certs/
+
+# Fixtures de carga: regenerables con tests/load/pdfs/generate_fixtures.sh
+tests/load/pdfs/*.pdf

@@ -27,6 +27,8 @@ Persistence directo por la red `services`.
 
 - Docker + Docker Compose v2, Make, Bash, curl, mkcert (si usás el binario
   suelto, ubicarlo en el PATH, p. ej. `~/.local/bin`)
+- Para las pruebas de carga: `jq`, `k6` y Vegeta
+  (`go install github.com/tsenart/vegeta@latest`)
 - Repos de API, Extraction y Persistence clonados como hermanos (ver
   `docs/architecture-decisions.md`): `../pdf-extractext-api`,
   `../pdf-extractext-extractor` y `../pdf-extractext-persistence`
@@ -106,6 +108,43 @@ Genera `docs/test-runs/<fechaUTC>-<tool>.md` (p. ej.
 `20261004T153012Z-k6.md`). Lo único que queda para completar a mano es la
 sección Observaciones. Detalle de flags:
 `./scripts/record-run.sh --help`.
+
+## Pruebas de carga (k6 y Vegeta)
+
+Corridas contra `https://pdf-extractext.localhost/extract` con el stack
+levantado (`make up`). Ambas **registran la corrida automáticamente** en
+`docs/test-runs/<fechaUTC>-<tool>.md` con la config real del stack (mismo
+mecanismo de `record-run.sh`); queda completar las Observaciones a mano.
+
+```bash
+make load-k6       # spike k6: 10s→100 VUs, 20s sostenidos, 10s→0
+make load-vegeta   # Vegeta: 50 req/s durante 30s (timeout 30s, -insecure)
+```
+
+- **k6** (`tests/load/k6-spike.js`): cada iteración elige al azar uno de los
+  4 fixtures PDF y lo envía por `multipart/form-data` (campo `file`, TLS
+  mkcert ignorado). El resumen mide p50, p90, p95 y error rate
+  (`http_req_failed`); el spike busca la saturación (503 controlado, D10),
+  no hay thresholds que aborten la corrida.
+- **Vegeta** (`tests/load/vegeta/run_vegeta.sh`): Vegeta no arma multipart,
+  así que el script pre-compila los cuerpos binarios (framing MIME + bytes
+  de cada PDF) para los 4 fixtures y rota los targets; p90 se calcula sobre
+  los resultados individuales (Vegeta solo reporta p50/p95/p99).
+- **Fixtures** (`tests/load/pdfs/`): 4 PDFs válidos de 1, 3, 8 y 20 páginas,
+  generados al vuelo por `generate_fixtures.sh` (deterministas; no se
+  versionan, ambos targets los regeneran solos).
+- **Ensayos sin stack** (opcional): `RECORD=0` corre el ataque sin registrarlo
+  y `TARGET_URL` permite apuntar a otro endpoint, p. ej. el mock de verificación
+  `tests/load/mock_api.py`:
+
+```bash
+python3 tests/load/mock_api.py &   # mock local que valida el multipart byte a byte
+RECORD=0 TARGET_URL=http://127.0.0.1:8642/extract make load-k6
+```
+
+Los resultados de cada corrida (throughput, % éxito, p50/p90/p95) quedan en
+la tabla del registro generado; el reporte completo de cada herramienta se
+imprime por consola durante la corrida.
 
 ## Reglas del bootstrap
 
