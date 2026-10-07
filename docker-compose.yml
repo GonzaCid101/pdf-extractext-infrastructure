@@ -73,7 +73,7 @@ services:
       - traefik.http.routers.extraction.entrypoints=internal
       - traefik.http.services.extraction.loadbalancer.server.port=8001
     deploy:
-      replicas: 1 # TP admite hasta 5; Traefik balancea (D3/D9)
+      replicas: ${EXTRACTION_REPLICAS:-1} # 1-5; Traefik balancea (D3/D9)
       resources:
         limits: # exigencia del TP (D9)
           cpus: "1.0"

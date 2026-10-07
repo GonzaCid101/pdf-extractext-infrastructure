@@ -58,6 +58,8 @@ repos de los servicios.
 
 ### D9. Límites de recursos
 - Extraction: `cpus: '1.0'`, `memory: 1G` por réplica (exigencia del TP).
+- Réplicas de Extraction parametrizables con `EXTRACTION_REPLICAS` (1–5,
+  default 1); el balanceo lo resuelve Traefik vía provider docker (D3).
 - Resto de servicios: sin límites en desarrollo local.
 
 ### D10. Saturación: 503 controlado (coordinación)

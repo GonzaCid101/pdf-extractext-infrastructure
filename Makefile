@@ -1,5 +1,7 @@
 COMPOSE := docker compose
 DOMAIN  := pdf-extractext.localhost
+# Propaga EXTRACTION_REPLICAS (env o `make up EXTRACTION_REPLICAS=N`) al stack.
+export EXTRACTION_REPLICAS
 
 .PHONY: check certs up down build logs ps smoke record-run load-k6 load-vegeta
 
@@ -17,6 +19,10 @@ certs:
 # check falla con mensaje claro si falta .env o algún contexto de build.
 check:
 	@test -f .env || { echo "ERROR: falta .env — ejecutá: cp .env.example .env"; exit 1; }
+	@r=$${EXTRACTION_REPLICAS:-$$(grep -E '^EXTRACTION_REPLICAS=' .env | cut -d= -f2-)}; \
+		r=$${r:-1}; \
+		{ [ "$$r" -ge 1 ] 2>/dev/null && [ "$$r" -le 5 ] 2>/dev/null; } || { \
+			echo "ERROR: EXTRACTION_REPLICAS=$$r fuera de rango (1-5, exigencia del TP)"; exit 1; }
 	@$(foreach var,API_CONTEXT EXTRACTION_CONTEXT PERSISTENCE_CONTEXT, \
 		ctx=$$(grep -E '^$(var)=' .env | cut -d= -f2-) ; \
 		test -n "$$ctx" || { echo "ERROR: $(var) no definido en .env"; exit 1; } ; \

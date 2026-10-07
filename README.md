@@ -60,6 +60,31 @@ mensaje que explica cómo resolverlo.
 El redirect :80→:443 aplica solo al borde; el entrypoint interno no redirige
 para que las llamadas servicio→servicio HTTP funcionen sin certificados.
 
+## Escalado de Extraction (1–5 réplicas)
+
+Para las corridas de carga del TP, las réplicas de Extraction se controlan con
+la variable `EXTRACTION_REPLICAS` (default `1`, máximo acordado `5`), sin
+editar `docker-compose.yml`:
+
+```bash
+make down                    # opcional; compose también reconcilia en caliente
+EXTRACTION_REPLICAS=5 make up
+docker compose ps extraction # verá extraction-1 ... extraction-5
+```
+
+Garantías al escalar (sin configuración extra):
+
+- **Balanceo:** Traefik detecta cada réplica vía el provider docker y las
+  suma al pool del servicio `extraction` (verificable en el dashboard:
+  HTTP → Services → `extraction@docker` debe listar N servers).
+- **Sin puertos al host:** las réplicas solo hacen `expose: 8001` en la red
+  interna; `replicas` es incompatible con puertos publicados, así que
+  Compose lo impediría.
+- **Recursos:** los límites `cpus: "1.0"` / `memory: 1G` aplican **por réplica**
+  (con 5 réplicas el stack puede consumir hasta 5 CPU / 5 GB en total).
+- El consumo desde API no cambia: sigue siendo
+  `EXTRACTION_URL=http://traefik:8090` con el router interno (D3).
+
 **Contrato de Extraction:** el servicio acepta **únicamente
 `multipart/form-data`**; no acepta `application/octet-stream` ni binarios
 crudos en el body. La API debe reenviar el archivo respetando ese formato.
