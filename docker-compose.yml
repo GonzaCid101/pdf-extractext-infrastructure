@@ -1,21 +1,22 @@
 name: pdf-extractext
 
 # Infraestructura de PDF Extractext.
-# Arquitectura: Traefik -> API -> {Extraction, Persistence} -> MongoDB.
-# Decisiones: docs/architecture-decisions.md
 
 services:
   traefik:
     image: traefik:v3
-    # TLS local con mkcert (D1-D2): :80 redirige a :443; entrypoint interno
-    # :8090 solo red, no publicado (tráfico servicio→servicio, D3).
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
     ports:
       - "80:80"
       - "443:443"
-      - "8090:8090"
+      # :8090 no se publica al host (D3): solo tráfico interno en `services`.
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
     volumes:
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./traefik/dynamic:/etc/traefik/dynamic:ro
@@ -25,7 +26,7 @@ services:
       - services
 
   api:
-    build: ${API_CONTEXT:?API_CONTEXT no definido — copiá .env.example a .env y ajustá la ruta al repo de API}
+    build: ${API_CONTEXT:-../pdf-extractext-api}
     image: pdf-extractext-api:${API_TAG:-dev}
     restart: unless-stopped
     security_opt:
@@ -33,20 +34,28 @@ services:
     expose:
       - "8000" # entrypoint público vía Traefik; no se publica al host
     environment:
-      # EXTRACTION_URL apunta al entrypoint interno :8090 de Traefik (D3):
-      # ahí Traefik balancea las réplicas de Extraction (D9).
-      EXTRACTION_URL: http://traefik:8090
-      PERSISTENCE_URL: http://persistence:8002
-      MAX_FILE_SIZE_MB: "50"
+      EXTRACTION_URL: ${EXTRACTION_URL:-http://traefik:8090}
+      PERSISTENCE_URL: ${PERSISTENCE_URL:-http://persistence:8002}
+      MAX_FILE_SIZE_MB: "${MAX_FILE_SIZE_MB:-50}"
+    deploy:
+      resources:
+        limits: # tope del TP
+          cpus: "1.0"
+          memory: 512M
+    healthcheck:
+      # Exec sin shell: la imagen distroless no tiene curl/wget.
+      test: ["CMD", "/healthprobe"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     depends_on:
       extraction:
         condition: service_healthy
       persistence:
         condition: service_healthy
       traefik:
-        condition: service_started # No healthcheck para Traefik, así que sólo started.
-    # Entrypoint público (D15): HTTPS con mkcert. El redirect 80→443 ya es
-    # global en la config estática (traefik.yml), no requiere router extra.
+        condition: service_started 
     labels:
       - traefik.enable=true
       - traefik.http.routers.api.rule=Host(`pdf-extractext.localhost`)
@@ -54,10 +63,10 @@ services:
       - traefik.http.routers.api.tls=true
       - traefik.http.services.api.loadbalancer.server.port=8000
     networks:
-      - services # sin acceso a `data` (solo Persistence habla con MongoDB)
+      - services
 
   extraction:
-    build: ${EXTRACTION_CONTEXT:?EXTRACTION_CONTEXT no definido — copiá .env.example a .env y ajustá la ruta al repo de Extraction}
+    build: ${EXTRACTION_CONTEXT:-../pdf-extractext-extractor}
     image: pdf-extractext-extraction:${EXTRACTION_TAG:-dev}
     restart: unless-stopped
     security_opt:
@@ -65,34 +74,31 @@ services:
     expose:
       - "8001" # solo red interna
     environment:
-      # Tunables de concurrencia parametrizados (Issue #9). Defaults medidos:
-      # 1 worker / 1 slot es el óptimo bajo 1 CPU/1GB (ver docs/performance del repo).
       WEB_CONCURRENCY: ${EXTRACTION_WORKERS:-1}
       MAX_CONCURRENCY: ${EXTRACTION_MAX_CONCURRENCY:-1}
       RETRY_AFTER_SECONDS: ${EXTRACTION_RETRY_AFTER_SECONDS:-1}
-    # Router interno (entrypoint :8090, no público): Traefik balancea réplicas (D3).
     labels:
       - traefik.enable=true
       - traefik.http.routers.extraction.rule=Host(`extraction.pdf-extractext.localhost`)
       - traefik.http.routers.extraction.entrypoints=internal
       - traefik.http.services.extraction.loadbalancer.server.port=8001
     deploy:
-      replicas: ${EXTRACTION_REPLICAS:-1} # 1-5; Traefik balancea (D3/D9)
+      replicas: ${EXTRACTION_REPLICAS:-1}
       resources:
-        limits: # exigencia del TP (D9)
+        limits:
           cpus: "1.0"
           memory: 1G
     networks:
       - services
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8001/readyz || exit 1"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/readyz', timeout=3)"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 15s
 
   persistence:
-    build: ${PERSISTENCE_CONTEXT:?PERSISTENCE_CONTEXT no definido — copiá .env.example a .env y ajustá la ruta al repo de Persistence}
+    build: ${PERSISTENCE_CONTEXT:-../pdf-extractext-persistence}
     image: pdf-extractext-persistence:${PERSISTENCE_TAG:-dev}
     restart: unless-stopped
     security_opt:
@@ -100,35 +106,42 @@ services:
     expose:
       - "8002" # solo red interna
     environment:
-      MONGO_URI: mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongodb:27017
+      MONGO_URI: mongodb://${MONGO_INITDB_ROOT_USERNAME:-dev}:${MONGO_INITDB_ROOT_PASSWORD:-dev}@mongodb:27017
     depends_on:
       mongodb:
         condition: service_healthy
+    deploy:
+      resources:
+        limits: # tope del TP
+          cpus: "1.0"
+          memory: 512M
     networks:
       - services
       - data # único servicio con acceso a MongoDB
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8002/readyz || exit 1"]
+      test: ["CMD", "/healthprobe"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 15s
 
   mongodb:
-    image: ${MONGO_IMAGE:?MONGO_IMAGE no definido — copiá .env.example a .env}
-    # Solo Persistence accede a MongoDB. 27017 no se publica al host.
+    image: ${MONGO_IMAGE:-mongo:8}
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
     environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:?Falta en .env}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:?Falta en .env}
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:-dev}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:-dev}
+    deploy:
+      resources:
+        limits: 
+          cpus: "1.0"
+          memory: 1G
     volumes:
-      - mongo_data:/data/db # volumen nombrado; jamás bind-mount versionado
+      - mongo_data:/data/db
     networks:
       - data
-    # Healthcheck técnico del contenedor; el health/readiness de los
-    # microservicios es pendiente de equipo.
     healthcheck:
       test: ["CMD", "mongosh", "--quiet", "-u", "${MONGO_INITDB_ROOT_USERNAME}", "-p", "${MONGO_INITDB_ROOT_PASSWORD}", "--eval", "db.adminCommand('ping')"]
       interval: 10s

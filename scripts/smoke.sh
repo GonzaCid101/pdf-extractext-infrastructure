@@ -36,7 +36,7 @@ fi
 wait_url() { # url, intentos
   local url=$1 tries=${2:-30} c
   for _ in $(seq 1 "$tries"); do
-    c=$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "$url" || echo 000)
+    c=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 3 "$url" || echo 000)
     [ "$c" != "000" ] && return 0; sleep 2
   done
   return 1
@@ -48,7 +48,7 @@ wait_mongo_healthy() {
   done
   return 1
 }
-wait_url -k https://traefik.pdf-extractext.localhost/api/overview || true
+wait_url https://traefik.pdf-extractext.localhost/api/overview || true
 wait_mongo_healthy || true
 
 # 2) Traefik responde (dashboard con TLS local, dominio interno)
@@ -216,6 +216,15 @@ git ls-files | grep -Eq '\.pem$' && { dirty=1; echo "     hay certificados/clave
 git ls-files | grep -Eq '(^|/)(mongodata|.*-data)/' && { dirty=1; echo "     hay datos runtime versionados"; }
 [ "$dirty" = "0" ] && ok "14. cero secretos/datos versionados" \
                     || fail "14. hay secretos o datos runtime versionados"
+
+# 15) El entrypoint interno :8090 de Traefik NO es accesible desde el host (D3)
+c1=0; nc -z -w 2 localhost 8090 2>/dev/null && c1=1
+c2=$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 http://localhost:8090/health 2>/dev/null || true)
+if [ "$c1" = "0" ] && [ "${c2:0:3}" != "200" ]; then
+  ok "15. entrypoint interno :8090 cerrado al host"
+else
+  fail "15. :8090 accesible desde el host (tcp: $c1, http: $c2)"
+fi
 
 echo
 if [ "$FAILURES" = "0" ]; then
