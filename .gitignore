@@ -12,5 +12,17 @@ mongodata/
 # Certificados TLS locales (mkcert) — cada dev genera los suyos, nunca versionar
 traefik/certs/
 
-# Fixtures de carga: regenerables con tests/load/pdfs/generate_fixtures.sh
+# PDFs oficiales del conjunto de prueba (tests/load/pdfs/): ya están copiados
+# en el repositorio, no se regeneran con generate_fixtures.sh ni se sustituyen
+# por fixtures artificiales.
 tests/load/pdfs/*.pdf
+
+# Artefactos transitorios de pruebas de carga (no versionar)
+tests/load/.k6-summary.json
+tests/load/.vegeta-results.bin
+tests/load/.vegeta-report.json
+tests/load/vegeta/bodies/
+
+# Resultados generados de pruebas de carga
+docs/test-runs/*
+!docs/test-runs/.gitkeep
