@@ -2,7 +2,7 @@
 
 ## 1. Arquitectura del Sistema
 
-El "Proyecto Cabras" se implementa sobre una arquitectura de microservicios orquestada con Docker Compose y Traefik como puerta de enlace API (API Gateway) y balanceador de carga. La topología de red principal es: **Traefik → API Gateway → Extraction & Persistence → MongoDB**.
+El Proyecto de Extraccion se implementa sobre una arquitectura de microservicios orquestada con Docker Compose y Traefik como puerta de enlace API (API Gateway) y balanceador de carga. La topología de red principal es: **Traefik → API Gateway → Extraction & Persistence → MongoDB**.
 
 La infraestructura está diseñada con un fuerte énfasis en el aislamiento de redes para mejorar la seguridad y controlar el flujo de datos. Se definen dos redes principales:
 
