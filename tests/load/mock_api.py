@@ -1,10 +1,8 @@
-"""Mock del API para validar k6/vegeta: verifica el multipart byte a byte.
+"""Mock del API para validar k6/vegeta sin stack.
 
-POST /extract: parsea el multipart, extrae el payload del campo "file" y lo
-compara por sha256 contra los fixtures reales. Responde 200 con el contrato
-{content, page_count} o 400 si el binario no coincide.
-GET  /: 200 (readiness).
-Vuelca hits por fixture y rechazos a /tmp/opencode/mock-hits.json en cada request.
+POST /extract: verifica el multipart del campo "file" por sha256 contra los
+4 PDFs oficiales. Responde 200 con {content, page_count} o 400.
+GET /: 200 (readiness).
 """
 import hashlib
 import json
@@ -13,9 +11,15 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 FIXDIR = Path(__file__).resolve().parent / "pdfs"
-NAMES = ["fixture-1p.pdf", "fixture-3p.pdf", "fixture-8p.pdf", "fixture-20p.pdf"]
+NAMES = [
+    "2020-Scrum-Guide-Spanish-Latin-South-American.pdf",
+    "Essential-Kanban-Condensed-Spanish.pdf",
+    "Filosofia Lean.pdf",
+    "scrum_manager_historias_usuario.pdf",
+]
 FIXTURES = {n: (FIXDIR / n).read_bytes() for n in NAMES}
-PAGES = {"fixture-1p.pdf": 1, "fixture-3p.pdf": 3, "fixture-8p.pdf": 8, "fixture-20p.pdf": 20}
+DIGESTS = {n: hashlib.sha256(b).hexdigest() for n, b in FIXTURES.items()}
+PAGES = {n: 0 for n in NAMES}
 state = {"hits": {n: 0 for n in NAMES}, "bad": 0, "no_file": 0}
 
 
@@ -24,15 +28,12 @@ def dump():
         json.dump(state, f)
 
 
-# Dump por request: el estado sobrevive a cualquier apagado del mock.
 def hit(kind, name=None):
     if name:
         state["hits"][name] += 1
     else:
         state[kind] += 1
     dump()
-
-
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -62,16 +63,14 @@ class Handler(BaseHTTPRequestHandler):
             self._send(400, b'{"error":"filename desconocido"}')
             return
         name = m.group(1).decode()
-        payload = body.split(b"\r\n\r\n", 1)[1]
-        payload = payload[: payload.rfind(b"\r\n--")]
-        if hashlib.sha256(payload).hexdigest() != hashlib.sha256(FIXTURES[name]).hexdigest():
+        part = body.split(b"\r\n\r\n", 1)[1]
+        part = part[: part.rfind(b"\r\n--")]
+        if hashlib.sha256(part).hexdigest() != DIGESTS[name]:
             hit("bad")
             self._send(400, b'{"error":"payload corrupto"}')
             return
         hit("hits", name)
-        resp = json.dumps(
-            {"content": f"pdf-extractext load fixture p1/{PAGES[name]}", "page_count": PAGES[name]}
-        ).encode()
+        resp = json.dumps({"content": f"pdf-extractext mock {name}", "page_count": PAGES[name]}).encode()
         self._send(200, resp)
 
     def log_message(self, *args):

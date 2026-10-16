@@ -1,0 +1,30 @@
+# Targets de referencia para POST /extract (multipart/form-data, campo "file").
+# URL: https://pdf-extractext.localhost/extract
+# Los 4 PDFs oficiales de tests/load/pdfs/ se envían rotados por multipart.
+# Este archivo es referencia; el script genera los targets de ejecución en un
+# directorio temporal y no lo sobrescribe.
+# Perfil: 50 req/s durante 30s, timeout 30s, -insecure (TLS mkcert).
+# pdf-extractext.localhost debe resolver en 127.0.0.1 (/etc/hosts si no resuelve).
+
+POST https://pdf-extractext.localhost/extract
+Content-Type: multipart/form-data; boundary=pdf-extractext-vegeta-boundary
+
+@tests/load/vegeta/bodies/2020-Scrum-Guide-Spanish-Latin-South-American.pdf
+
+
+POST https://pdf-extractext.localhost/extract
+Content-Type: multipart/form-data; boundary=pdf-extractext-vegeta-boundary
+
+@tests/load/vegeta/bodies/Essential-Kanban-Condensed-Spanish.pdf
+
+
+POST https://pdf-extractext.localhost/extract
+Content-Type: multipart/form-data; boundary=pdf-extractext-vegeta-boundary
+
+@tests/load/vegeta/bodies/Filosofia Lean.pdf
+
+
+POST https://pdf-extractext.localhost/extract
+Content-Type: multipart/form-data; boundary=pdf-extractext-vegeta-boundary
+
+@tests/load/vegeta/bodies/scrum_manager_historias_usuario.pdf
