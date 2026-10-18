@@ -47,13 +47,34 @@ repos de los servicios.
 
 ### D7. MongoDB `mongo:8` (RESUELTA, antes pendiente #6)
 - `MONGO_IMAGE=mongo:8` es la versión definitiva.
-- Coordinación: los tests de integración de Persistence deben alinearse
-  (hoy fijados en `mongo:7.0`; comunicado al responsable).
+- Coordinación **resuelta:** los tests de integración de Persistence usan
+  `mongo:8` por defecto (helper `mongoImage()` en
+  `internal/infra/mongo/client_integration_test.go`, sobreescribible con
+  `MONGO_TEST_IMAGE`); el README del repo quedó alineado a `mongo:8`.
 
-### D8. Healthchecks
-- `depends_on: service_healthy` solo donde existe healthcheck (Mongo).
-- **Decisión:** Se implementan healthchecks in-container (CMD-SHELL con `curl -f http://localhost:<PUERTO>/readyz`) para `extraction` y `persistence`. El servicio `api` ahora depende de su `condition: service_healthy` para un arranque ordenado. Traefik, por defecto, excluye automáticamente del balanceo a las réplicas unhealthy.
-- **Contexto:** Los microservicios ahora exponen `/readyz`. Para garantizar la orquestación de arranque y el balanceo correcto en Traefik, se habilitan estos healthchecks.
+### D8. Healthchecks (mecanismo real, sin `curl` en contenedores)
+- `depends_on: service_healthy` donde existe healthcheck; el arranque ordenado
+  es: `mongodb` healthy → `persistence` healthy → `extraction` healthy →
+  `api` (que además espera a `persistence` y a `traefik` en `started`).
+- **Decisión (actualizada):** los healthchecks se implementan in-container con
+  las herramientas nativas de cada runtime, **sin instalar `curl`**:
+  - `api` (Go, imagen distroless sin shell): `["CMD", "/healthprobe"]`
+    (binario estático propio; el `healthprobe` consulta el endpoint local).
+  - `persistence` (Go, imagen distroless `nonroot`): `["CMD", "/healthprobe"]`
+    (el `healthprobe` consulta `http://127.0.0.1:<PUERTO>/health/ready`,
+    que verifica la dependencia crítica: Mongo).
+  - `extraction` (Python): `["CMD", "python3", "-c", "import urllib.request;
+    urllib.request.urlopen('http://127.0.0.1:8001/readyz', timeout=3)"]`
+    (biblioteca estándar de Python, ya presente en la imagen).
+  - `mongodb`: `mongosh --quiet … db.adminCommand('ping')`.
+- **Contexto:** los servicios exponen probes (`/readyz`, `/health/ready`);
+  Traefik excluye automáticamente del balanceo a las réplicas unhealthy.
+- **Justificación técnica:** las imágenes `distroless` no traen shell ni
+  `curl`; añadir `curl` engorda la imagen y amplía la superficie de ataque.
+  Usar el binario compilado (Go) y la librería estándar (Python) es más
+  liviano, sin dependencias nuevas y con paridad entre build y runtime.
+- **Descartado:** `CMD-SHELL` con `curl -f http://localhost:<PUERTO>/readyz`
+  (requería instalar `curl`/shell y unificar el endpoint de probe).
 
 ### D9. Límites de recursos
 - Extraction: `cpus: '1.0'`, `memory: 1G` por réplica (exigencia del TP).
