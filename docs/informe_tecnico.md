@@ -35,7 +35,7 @@ El sistema implementa un mecanismo de backpressure a nivel del servicio de Extra
 
 ## 3. Análisis de Cuellos de Botella e Investigación
 
-En la fase inicial de pruebas de carga, con una configuración de una única réplica del servicio de Extracción, se identificó rápidamente un cuello de botella significativo. Bajo un pico de carga simulado con k6 (ej. `100 VUs` o `25 req/s`), la réplica única del Extractor alcanzaba el 100% de uso de CPU de forma sostenida. Esto se manifestaba en:
+En la fase inicial de pruebas de carga, con una configuración de una única réplica del servicio de Extracción, se identificó rápidamente un cuello de botella significativo. Bajo un pico de carga inducido con k6 (ej. `100 VUs` o `25 req/s`), la réplica única del Extractor alcanzaba el 100% de uso de CPU de forma sostenida. Esto se manifestaba en:
 *   **Altas latencias**: Las solicitudes a la API Gateway tardaban considerablemente en recibir respuesta, superando los umbrales de p95 y p99 esperados.
 *   **Errores HTTP 503**: A medida que la carga aumentaba y la capacidad del Extractor era excedida, el `AdmissionMiddleware` comenzaba a rechazar solicitudes con 503, indicando saturación del servicio.
 *   **Timeouts en la API**: La API Gateway, al esperar por el Extractor, empezaba a generar timeouts hacia el cliente final debido a que el Extractor no podía procesar las solicitudes a tiempo.
@@ -44,41 +44,44 @@ La investigación de logs y el monitoreo de recursos de los contenedores confirm
 
 La solución arquitectónica natural para este tipo de cuello de botella, y alineada con los requisitos del TP, fue la **paralelización horizontal**. Al escalar el servicio de Extracción a múltiples réplicas, el tráfico entrante puede ser distribuido entre varias instancias, permitiendo que el sistema procese un mayor volumen de solicitudes concurrentes.
 
-## 4. Comparativa de Métricas (Antes vs Después)
+## 4. Comparativa de Métricas (pendiente de corridas válidas)
 
-A continuación, se presentan las métricas clave de rendimiento comparando el escenario inicial (1 réplica del servicio de Extracción) con el escenario optimizado (5 réplicas del servicio de Extracción), obtenidas de las corridas de pruebas de carga.
+> **Estado:** esta sección **todavía no contiene resultados válidos**. La
+> comparativa 1 vs 5 réplicas se completará cuando los perfiles de carga estén
+> corregidos: hoy `tests/load/spike_tests.js` ejecuta 1 VU (no 100) y
+> `tests/load/vegeta/run_vegeta.sh` usa `RATE=1/s` (no 50 req/s) — ver
+> `audit/audit-findings.md` (`FIND-003`, `FIND-007`).
+> Las corridas registradas en `docs/test-runs/` (locales, no versionadas)
+> corresponden a esos perfiles aún no corregidos, por lo que no son
+> comparables con la referencia de la cátedra.
 
 ### Escenario Base: 1 Réplica de Extraction
 
-*   **Archivo de Registro (simulado)**: `docs/test-runs/20261007T100000Z-k6-1-replica.md`
-*   **Configuración**: `EXTRACTION_REPLICAS=1`, 1 CPU / 1GB por réplica.
+- **Configuración:** `EXTRACTION_REPLICAS=1`, 1 CPU / 1 GB por réplica.
 
-| Métrica               | Valor (1 Réplica) | Unidad   | Observaciones                                  |
-| :-------------------- | :---------------- | :------- | :--------------------------------------------- |
-| Latencia (p95)        | 850               | ms       | Latencia alta, indicando cuello de botella.    |
-| Latencia (p99)        | 1500              | ms       | Picos de latencia muy elevados.                |
-| Throughput (req/s)    | 12                | req/s    | Capacidad de procesamiento limitada.           |
-| Tasa de Errores (503) | 35                | %        | Alta tasa de rechazos por saturación (backpressure). |
-| Tasa de Errores (500) | 5                 | %        | Algunos errores internos por sobrecarga.       |
+| Métrica | Valor | Unidad | Observaciones |
+| :--- | :--- | :--- | :--- |
+| Latencia (p95) | — | ms | pendiente de corrida válida |
+| Latencia (p99) | — | ms | pendiente de corrida válida |
+| Throughput | — | req/s | pendiente de corrida válida |
+| Tasa de errores (503) | — | % | pendiente de corrida válida |
+| Tasa de errores (500) | — | % | pendiente de corrida válida |
 
 ### Escenario Optimizado: 5 Réplicas de Extraction
 
-*   **Archivo de Registro (simulado)**: `docs/test-runs/20261007T110000Z-k6-5-replicas.md`
-*   **Configuración**: `EXTRACTION_REPLICAS=5`, 1 CPU / 1GB por réplica.
+- **Configuración:** `EXTRACTION_REPLICAS=5`, 1 CPU / 1 GB por réplica.
 
-| Métrica               | Valor (5 Réplicas) | Unidad   | Observaciones                                  |
-| :-------------------- | :----------------- | :------- | :--------------------------------------------- |
-| Latencia (p95)        | 180                | ms       | Reducción drástica, mejor respuesta.           |
-| Latencia (p99)        | 350                | ms       | Picos de latencia controlados.                 |
-| Throughput (req/s)    | 55                 | req/s    | Capacidad de procesamiento multiplicada por ~4.5. |
-| Tasa de Errores (503) | 2                  | %        | Rechazos mínimos, solo en picos extremos.      |
-| Tasa de Errores (500) | 0.1                | %        | Errores internos casi eliminados.              |
+| Métrica | Valor | Unidad | Observaciones |
+| :--- | :--- | :--- | :--- |
+| Latencia (p95) | — | ms | pendiente de corrida válida |
+| Latencia (p99) | — | ms | pendiente de corrida válida |
+| Throughput | — | req/s | pendiente de corrida válida |
+| Tasa de errores (503) | — | % | pendiente de corrida válida |
+| Tasa de errores (500) | — | % | pendiente de corrida válida |
 
-### Conclusión de la Comparativa
+### Conclusión
 
-La adición de réplicas al servicio de Extracción (de 1 a 5) resultó en una mejora sustancial del rendimiento del sistema:
-*   La **latencia p95 se redujo en aproximadamente un 78%**, y la **latencia p99 en un 76%**, lo que se traduce en una experiencia de usuario mucho más fluida y predecible.
-*   El **throughput se incrementó en casi un 350%**, demostrando una escalabilidad efectiva para manejar un volumen de solicitudes significativamente mayor.
-*   La **tasa de errores 503 disminuyó drásticamente en un 94%**, indicando que el sistema es ahora mucho más resistente a la saturación bajo carga. Los errores 500 también se redujeron casi por completo.
-
-Estos resultados demuestran la efectividad de la estrategia de escalado horizontal y el diseño de backpressure para construir un sistema robusto y performante.
+La hipótesis a validar es que escalar horizontalmente Extraction de 1 a 5
+réplicas reduce la latencia y los rechazos por saturación (503) y aumenta el
+throughput, según el análisis cualitativo de la §3. La conclusión numérica
+queda pendiente de las corridas de carga válidas.
