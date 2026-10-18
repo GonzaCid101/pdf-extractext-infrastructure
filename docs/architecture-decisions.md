@@ -38,7 +38,7 @@ repos de los servicios.
 - 27017 no se publica al host; volúmenes nombrados; jamás bind-mounts de datos.
 
 ### D5. Versiones de imagen parametrizables
-- `EXTRACTION_TAG` / `PERSISTENCE_TAG` en `.env`, default `dev`.
+- `API_TAG` / `EXTRACTION_TAG` / `PERSISTENCE_TAG` en `.env`, default `dev`.
 - Se elimina el tag hardcodeado `:bootstrap`.
 
 ### D6. Build desde repos hermanos (RESUELTA, antes pendiente #7)
@@ -77,10 +77,14 @@ repos de los servicios.
   (requería instalar `curl`/shell y unificar el endpoint de probe).
 
 ### D9. Límites de recursos
-- Extraction: `cpus: '1.0'`, `memory: 1G` por réplica (exigencia del TP).
+- Todos los servicios tienen límite explícito de CPU y memoria por
+  instancia (exigencia del TP):
+  - `extraction`: `cpus: '1.0'`, `memory: 1G` por réplica.
+  - `api`, `persistence`: `cpus: '1.0'`, `memory: 512M`.
+  - `traefik`: `cpus: '0.5'`, `memory: 512M`.
+  - `mongodb`: `cpus: '1.0'`, `memory: 1G`.
 - Réplicas de Extraction parametrizables con `EXTRACTION_REPLICAS` (1–5,
   default 1); el balanceo lo resuelve Traefik vía provider docker (D3).
-- Resto de servicios: sin límites en desarrollo local.
 
 ### D10. Saturación: 503 controlado (coordinación)
 - Rechazo con 503 + `Retry-After` lo implementa Extraction (su issue).
