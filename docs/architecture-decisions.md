@@ -80,7 +80,8 @@ repos de los servicios.
   default 1); el balanceo lo resuelve Traefik vía provider docker (D3).
 
 ### D10. Saturación: 503 controlado (coordinación)
-- Rechazo con 503 + `Retry-After` lo implementa Extraction (su issue).
+- Rechazo con 503 + `Retry-After` lo implementa Extraction (su issue) con el
+  code `SERVICE_OVERLOADED` (ver D16); la API lo propaga tal cual (FIND-012).
 - El TP admite 429, pero 429 es semántica de rate-limit por consumidor y no
   figura en el catálogo contractual. Infra no participa.
 
@@ -116,3 +117,13 @@ repos de los servicios.
 - Router público `Host(pdf-extractext.localhost)` en entrypoint `https` con
   TLS (mkcert); la redirección :80→:443 es global en la config estática, por lo
   que no se define un router HTTP redundante.
+
+### D16. Errores RFC 9457 en los tres servicios (CON-018/CON-019)
+- Decisión: todos los errores responden `application/problem+json` (RFC 9457)
+  con `type` (URN `urn:pdf-extractext:<slug>`), `title`, `status`, `detail` +
+  el miembro de extensión `code`; Persistence añade `document` en el 409.
+- Cada servicio mantiene un catálogo cerrado URN+title por code; la API
+  re-emite los problemas de upstream preservando `type`/`code`/`detail`.
+- Propagación (FIND-012): los 4xx y el 503 del extractor pasan tal cual (el
+  503 con su `Retry-After`); 502 solo para fallos de red/timeout o 500.
+- Unifica el contrato y elimina el legacy `{"error": "..."}` (CON-019).

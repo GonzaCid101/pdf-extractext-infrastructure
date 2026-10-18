@@ -154,12 +154,15 @@ else
   fail "9. POST /extract con PDF: HTTP $code (esperaba 200 con content y page_count), cuerpo: $(head -c 300 "$SMOKE_TMP/extract-ok.json" 2>/dev/null || echo '<vacío>')"
 fi
 
-# 10) POST sin campo "file": la API debe rechazar con exactamente 400 sin tocar Extraction.
+# 10) POST sin campo "file": la API debe rechazar con 400 problem+json (RFC 9457).
 code=$(curl -sk -o "$SMOKE_TMP/extract-err.json" -w '%{http_code}' --max-time 30 \
   -F "otro-campo=@${FIXTURE}" https://pdf-extractext.localhost/extract || true)
 : "${code:=000}"
-[ "$code" = "400" ] && ok "10. POST /extract sin campo file: HTTP 400 (rechazo correcto)" \
-                    || fail "10. POST /extract sin campo file: HTTP $code (esperaba exactamente 400), cuerpo: $(head -c 300 "$SMOKE_TMP/extract-err.json" 2>/dev/null)"
+if [ "$code" = "400" ] && jq -e '.code == "INVALID_REQUEST" and .status == 400 and .type' "$SMOKE_TMP/extract-err.json" >/dev/null 2>&1; then
+  ok "10. POST /extract sin campo file: HTTP 400 con problem+json RFC 9457"
+else
+  fail "10. POST /extract sin campo file: HTTP $code (esperaba 400 problem+json), cuerpo: $(head -c 300 "$SMOKE_TMP/extract-err.json" 2>/dev/null || echo '<vacio>')"
+fi
 
 # 11) MongoDB NO es alcanzable desde el host ni desde la red de servicios
 c1=0; nc -z -w 2 localhost 27017 2>/dev/null && c1=1

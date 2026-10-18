@@ -36,7 +36,9 @@ Se derivan de los hallazgos a medida que avanzan las etapas. Todavía sin asigna
 | `RC-004` | El informe técnico se redactó con datos de ejemplo/simulados en lugar de corridas reales y no se reemplazaron al obtener mediciones. | `FIND-008` | Propuesta | `[HIPÓTESIS]` |
 | `RC-005` | Los documentos de infraestructura (ADR, README, `.env.example`) evolucionaron sin una revisión de consistencia cruzada tras cada cambio de implementación. | `FIND-009`, `FIND-010` | Propuesta | `[HIPÓTESIS]` |
 | `RC-006` | El conjunto de PDFs de carga se armó copiando archivos sin verificar su procedencia/hash, dejando un duplicado del PDF pesado del extractor. | `FIND-011` | Propuesta | `[HIPÓTESIS]` |
-| `RC-007` | El cliente HTTP del API colapsa cualquier status de upstream en un error genérico, sin distinguir saturación (503) de fallo real. | `FIND-012` | Propuesta | `[HIPÓTESIS]` |
+| `RC-007` | El cliente HTTP del API colapsa cualquier status de upstream en un error genérico (502/500), sin distinguir saturación (503), error de cliente (400/422) o fallo real. | `FIND-012`, `FIND-013` | `[RESUELTA - IMPLEMENTADA]` (commits extractor `627aecf`, persistence `2af0e62`, API `fb3d7c3`) | `[VERIFICADO-PRUEBA]` |
+| `RC-008` | El API genera request-id localmente pero `persistence_client.go` no lo envía como header: la correlación distribuida se rompe en el salto API→Persistence. | `FIND-014` | `[RESUELTA - IMPLEMENTADA]` (commit API `fb3d7c3`) | `[VERIFICADO-PRUEBA]` |
+| `RC-009` | El catálogo de códigos del extractor no define un code de saturación: el 503 reutiliza `INTERNAL_ERROR`. | `FIND-015` | `[RESUELTA - IMPLEMENTADA]` (commit extractor `627aecf`) | `[VERIFICADO-PRUEBA]` |
 
 ---
 
@@ -367,11 +369,80 @@ Nota: los tests de integración **no se ejecutaron** (requieren Docker/testconta
 | **Repositorio** | `pdf-extractext-api` (exige coordinación con Extraction) |
 | **Ubicación** | `internal/services/extraction_client.go:72-73` (cualquier status ≠ 200 → error genérico) · `internal/api/extract.go:47` y `internal/api/upload_pdf.go:65,73` (→ 502) |
 | **Descripción** | Extraction, al superar `MAX_CONCURRENCY`, responde **503 + `Retry-After`** (patrón fail-fast, ADR D10). El cliente del API descarta el status y el header del upstream y los handlers responden **502** genérico: el cliente final nunca ve el backpressure controlado que exige la consigna (503/429 con espera informada). Además, `/upload-pdf` tiene timeout de 30 s, por lo que bajo saturación el cliente percibe 502 en lugar de un rechazo inmediato. |
-| **Evidencia** | - Directo contra Extraction (12 `curl` paralelos a `http://extraction:8001/extract` desde la red `services`): respuestas **503** con header `Retry-After`. <br> - Vía dominio público (14 `curl` paralelos a `https://pdf-extractext.localhost/extract`): **3×200 + 11×502**, y ningún header `Retry-After` en las respuestas. <br> - `extraction_client.go:72-73`: `if resp.StatusCode != http.StatusOK { return nil, … }` (no propaga ni el código ni el header). |
+| **Evidencia** | - Directo contra Extraction (12 `curl` paralelos a `http://extraction:8001/extract` desde la red `services`): respuestas **503** con header `Retry-After`. <br> - Vía dominio público (14 `curl` paralelos a `https://pdf-extractext.localhost/extract`): **3×200 + 11×502**, y ningún header `Retry-After` en las respuestas. <br> - `extraction_client.go:72-73`: `if resp.StatusCode != http.StatusOK { return nil, … }` (no propaga ni el código ni el header). <br> - (Etapa 2) Un PDF corrupto produce **422** `INVALID_PDF_CONTENT` en el extractor y la API responde **502**: el enmascaramiento cubre cualquier status, no solo el 503. |
 | **Etiqueta de taxonomía** | `[VERIFICADO-PRUEBA]` |
 | **Impacto** | El cliente (y las herramientas de carga) trata saturación como fallo: reintenta en el momento y empeora la cola. Se pierde la señal de "esperá N segundos" que es el núcleo del manejo de congestión del TP. |
 | **Condiciones de descubrimiento** | Prueba de saturación manual con `curl` concurrente durante la verificación funcional del sistema (2026-10-18). |
 | **Causa raíz asociada** | `RC-007` |
 | **Acción recomendada** | Propagar el 503 y el header `Retry-After` del extractor en `/extract` y `/upload-pdf` (y documentarlos en el README/OpenAPI). Requiere decisión y cambio de comportamiento en el API. |
-| **Estado** | Abierto |
-| **Restricciones / notas** | **Prioridad del equipo:** primero el funcionamiento correcto del sistema; se corregirá al final. Las pruebas de carga (k6/Vegeta) y sus perfiles quedan para la etapa final (`FIND-003`, `FIND-007`). |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (commit API `fb3d7c3`, 2026-10-19) — los 4xx y el 503 del extractor se propagan tal cual (503 conserva `Retry-After`); 502 solo para fallos de red/timeout o 500 del upstream. Verificado en runtime (curas en vivo, C-21). |
+| **Restricciones / notas** | ~~Prioridad: primero el funcionamiento correcto; corrección diferida.~~ Resuelto en la fase de correcciones aprobada. Las pruebas de carga (k6/Vegeta) quedan para la etapa final (`FIND-003`, `FIND-007`). |
+
+---
+
+### FIND-013
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-013` |
+| **Título** | Un id malformado en `GET /documents/{id}` responde **500** en la API (Persistence devuelve 400) |
+| **Etapa de detección** | Etapa 2 — auditoría funcional (2026-10-18) |
+| **Categoría** | contrato / errores |
+| **Severidad** | **Media** (un error de cliente se reporta como fallo interno; contamina el monitoreo con 5xx) |
+| **Repositorio** | `pdf-extractext-api` |
+| **Ubicación** | `internal/services/persistence_client.go:106-111` (`FindByID` solo traduce 404/200; cualquier otro status → error genérico) · `internal/api/documents.go:52-58` |
+| **Descripción** | Persistence valida el formato del id y responde 400 `INVALID_REQUEST` (`pdf-extractext-persistence/internal/api/documents.go:129-132`). El cliente de la API no propaga ese 400 y el `CustomErrorHandler` cae al fallback 500 `INTERNAL_ERROR`. Misma causa raíz que `FIND-012` (RC-007), pero en el salto API→Persistence. |
+| **Evidencia** | `curl https://pdf-extractext.localhost/documents/xyz` → **500** `{"code":"INTERNAL_ERROR","message":"error interno del servidor"}` (runtime 2026-10-18); el id válido inexistente (`aaaaaaaaaaaaaaaaaaaaaaaa`) → **404** correcto. |
+| **Etiquetas de taxonomía** | `[VERIFICADO-PRUEBA]` |
+| **Impacto** | El cliente corrige mal su petición (espera 500 y no reintenta con id válido); los tableros de error cuentan 5xx por tráfico inválido. |
+| **Condiciones de descubrimiento** | Trazado del CRUD de `/documents` en la Etapa 2 con `curl` sobre el stack real. |
+| **Causa raíz asociada** | `RC-007` |
+| **Acción recomendada** | Validar el formato del id en la API o mapear 4xx del upstream a su status original (junto con la corrección de `FIND-012`). |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (commit API `fb3d7c3`, 2026-10-19) — id hex-24 validado en la API (GET/PATCH/DELETE) y el `UpstreamError` re-emite el 400 de Persistence sin convertirlo en 500. Verificado en runtime (C-21). |
+| **Restricciones / notas** | ~~Corrección diferida.~~ Resuelto en la fase de correcciones aprobada. |
+
+---
+
+### FIND-014
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-014` |
+| **Título** | La API no propaga `X-Request-ID` a Persistence: se rompe la correlación distribuida |
+| **Etapa de detección** | Etapa 2 — auditoría funcional (2026-10-18) |
+| **Categoría** | observabilidad / trazabilidad |
+| **Severidad** | **Baja** (no afecta funcionalidad; dificulta el diagnóstico end-to-end) |
+| **Repositorio** | `pdf-extractext-api` |
+| **Ubicación** | `internal/services/persistence_client.go` (ninguno de los 5 métodos setea `X-Request-ID`) vs `internal/services/extraction_client.go:62-64` (sí lo propaga) y `pdf-extractext-persistence/internal/api/middleware.go:32-49` (acepta y usa el header) |
+| **Descripción** | El middleware de la API acepta/genera `X-Request-ID` y lo reenvía a Extraction, pero el cliente de Persistence nunca lo envía; Persistence genera entonces un UUID propio. Dos request-ids distintos describen la misma petición en los logs del sistema. |
+| **Evidencia** | `curl https://pdf-extractext.localhost/documents -H 'X-Request-ID: etapa2-audit-001'` → 200, y `docker logs pdf-extractext-persistence-1` no contiene `etapa2-audit-001` (generó otro UUID) — runtime 2026-10-18. |
+| **Etiquetas de taxonomía** | `[VERIFICADO-PRUEBA]` |
+| **Impacto** | No se puede rastrear una petición completa en los logs de los 4 servicios con un solo id. |
+| **Condiciones de descubrimiento** | Verificación de correlación entre servicios en la Etapa 2. |
+| **Causa raíz asociada** | `RC-008` |
+| **Acción recomendada** | Setear `X-Request-ID` en los 5 métodos de `persistence_client.go`, igual que hace el cliente de Extraction. |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (commit API `fb3d7c3`, 2026-10-19) — los 5 métodos del cliente de Persistence envían `X-Request-ID` (helper `newRequest`). Verificado en runtime (C-21). |
+| **Restricciones / notas** | ~~Sin corrección en esta etapa.~~ Resuelto en la fase de correcciones aprobada. |
+
+---
+
+### FIND-015
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-015` |
+| **Título** | El 503 de saturación del extractor declara `code: "INTERNAL_ERROR"` |
+| **Etapa de detección** | Etapa 2 — auditoría funcional (2026-10-18) |
+| **Categoría** | contrato / errores |
+| **Severidad** | **Baja** (el status y `Retry-After` son correctos; solo el code del envelope es semánticamente erróneo) |
+| **Repositorio** | `pdf-extractext-extractor` |
+| **Ubicación** | `src/pdf_extractext_extractor/admission.py:45-51` (503 con `code: "INTERNAL_ERROR"`) · `errors.py:4-9` (catálogo sin entrada de saturación) |
+| **Descripción** | El catálogo de errores define 400/422/500 pero no un code para saturación; el middleware de admisión reutiliza `INTERNAL_ERROR` en el 503. Un cliente que decida por `code` (y no por status) tratará una condición transitorio como fallo interno permanente. |
+| **Evidencia** | `[VERIFICADO-CÓDIGO]` `admission.py:45-51` devuelve `{"code":"INTERNAL_ERROR","message":"Servicio saturado…"}` con header `Retry-After`. |
+| **Etiquetas de taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | Semántica de error engañosa en el contrato del extractor; el envelope contradice al status. |
+| **Condiciones de descubrimiento** | Revisión de los contratos de error de los 3 servicios en la Etapa 2. |
+| **Causa raíz asociada** | `RC-009` |
+| **Acción recomendada** | Añadir un code dedicado (p. ej. `SERVICE_OVERLOADED`) al catálogo del extractor y usarlo en el 503. |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (commit extractor `627aecf`, 2026-10-19) — catálogo `PROBLEM_CATALOG` con `SERVICE_OVERLOADED` y 503 en `application/problem+json` (RFC 9457). Verificado en runtime (C-21). |
+| **Restricciones / notas** | ~~Sin corrección en esta etapa.~~ Resuelto junto con la adopción de RFC 9457 (`CON-018`). |
