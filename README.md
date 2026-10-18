@@ -39,7 +39,7 @@ Consume Extraction vía Traefik :8090 y Persistence directo por la red
 cp .env.example .env        # ajustá *_CONTEXT si tus rutas difieren
 make certs                  # TLS local con mkcert (una vez por máquina)
 make up                     # valida contextos y levanta todo
-make smoke                  # verifica los 14 checks
+make smoke                  # verifica los 15 checks
 make down
 make logs / make ps         # utilidades
 ```
@@ -83,9 +83,19 @@ Ambas registran automáticamente en `docs/test-runs/`.
   `{content, page_count}`.
 - **Vegeta** (`tests/load/vegeta/run_vegeta.sh`): pre-compila cuerpos
   multipart de los 4 PDFs oficiales y lanza un único ataque a 50 req/s.
-- **PDFs oficiales** (`tests/load/pdfs/`): los 4 del profesor. Sin
-  `generate_fixtures.sh`.
+- **PDFs oficiales** (`tests/load/pdfs/`): los 4 del profesor. **No se
+  versionan** (`.gitignore` los excluye por peso y provisión de cátedra):
+  cada dev debe copiarlos localmente. Sin `generate_fixtures.sh`.
+- **Registro de corridas** (`docs/test-runs/`): los `.md` que generan
+  `run_k6.sh`/`run_vegeta.sh` son **locales** (`.gitignore` los excluye);
+  solo `TEMPLATE.md` se versiona.
 - **RECORD=0**: ensayo sin registrar (p. ej. contra `tests/load/mock_api.py`).
+
+> **Nota (perfiles en corrección):** los perfiles que ejecutan hoy los
+> scripts no coinciden con el objetivo del TP: `spike_tests.js` sube a 1 VU
+> (no 100) y `run_vegeta.sh` usa `RATE=1/s` (no 50 req/s). Ver
+> `audit/audit-findings.md` (`FIND-003`, `FIND-007`). Hasta corregirlos, las
+> corridas registradas no son comparables con la referencia de la cátedra.
 
 ## Reglas del bootstrap
 
