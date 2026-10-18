@@ -13,21 +13,22 @@ Inspección de solo lectura: `find`, `ls`, `wc`, `sha256sum` (2026-10-17).
 |---|---|---|---|---|
 | `pdf-extractext-extractor` | `tests/data/heavy.292.pdf` | 8.901.466 | `257f73b908420ac5c78852fb8673beb683a8ca0c05d2e6a82b5e9629f6ad7be8` | Usado por `tests/load/k6_suite.js` y `tests/load/vegeta_target.sh` del repo Extractor. `[VERIFICADO-CÓDIGO]` |
 
-**Total de PDFs en el workspace: 1.** Búsqueda `find … -iname "*.pdf"` (ignorando `.git`) sin otros resultados. `[VERIFICADO-CÓDIGO]`
+**Total de PDFs en el workspace (2026-10-18): 5** = `heavy.292.pdf` (extractor) + los 4 PDFs oficiales en `tests/load/pdfs/` (ver §1.2). Nota: `Essential-Kanban-Condensed-Spanish.pdf` es una copia exacta de `heavy.292.pdf`. `[VERIFICADO-CÓDIGO]`
 
-### 1.2 PDFs oficiales del TP — AUSENTES en disco
+### 1.2 PDFs oficiales del TP — presentes localmente, NO versionados
 
-Esperados por `pdf-extractext-infrastructure/tests/load/vegeta/run_vegeta.sh:34-39` y `tests/load/spike_tests.js:17-22`:
+Re-verificado el 2026-10-18: los 4 PDFs que esperan `run_vegeta.sh:34-43` y `spike_tests.js:17-22` **están presentes** en `pdf-extractext-infrastructure/tests/load/pdfs/`, pero `.gitignore:18` los excluye (no se versionan). Decisión del equipo (2026-10-18): mantenerlos fuera de git.
 
-| # | Nombre esperado | Tamaño | SHA-256 | Estado |
-|---|---|---|---|---|
-| 1 | `2020-Scrum-Guide-Spanish-Latin-South-American.pdf` | — | — | **AUSENTE** `[VERIFICADO-CÓDIGO]` |
-| 2 | `Essential-Kanban-Condensed-Spanish.pdf` | — | — | **AUSENTE** `[VERIFICADO-CÓDIGO]` |
-| 3 | `Filosofia Lean.pdf` | — | — | **AUSENTE** `[VERIFICADO-CÓDIGO]` |
-| 4 | `scrum_manager_historias_usuario.pdf` | — | — | **AUSENTE** `[VERIFICADO-CÓDIGO]` |
+| # | Nombre | Tamaño (bytes) | SHA-256 |
+|---|---|---|---|
+| 1 | `2020-Scrum-Guide-Spanish-Latin-South-American.pdf` | 319.343 | `6bbff3f361e52016cbb75a72671f1b31b5e043fdc1cc3f022f1b15a32795a256` |
+| 2 | `Essential-Kanban-Condensed-Spanish.pdf` | 8.901.466 | `257f73b908420ac5c78852fb8673beb683a8ca0c05d2e6a82b5e9629f6ad7be8` |
+| 3 | `Filosofia Lean.pdf` | 668.142 | `c77b55bd68477ecc0d96074ea4606bffe5802a1c8a241a725f6eb358be17ce40` |
+| 4 | `scrum_manager_historias_usuario.pdf` | 3.830.899 | `30efd6fcd0c022665676edcf164feb28e6b43dcce53ab9738550b99d70f5fd84` |
 
-- Ubicación esperada: `pdf-extractext-infrastructure/tests/load/pdfs/`.
-- Motivo: excluidos por `.gitignore:18` (`tests/load/pdfs/*.pdf`); ver `FIND-001`/`FIND-002` y `ASK-001`.
+- **Hallazgo (`FIND-011`):** el archivo `Essential-Kanban-Condensed-Spanish.pdf` es **byte a byte idéntico** a `pdf-extractext-extractor/tests/data/heavy.292.pdf` (mismo SHA-256 y tamaño). Es decir, el conjunto de 4 PDFs contiene un duplicado de un PDF de 8,9 MB / 292 páginas etiquetado como el documento Kanban, no el documento oficial. Esto afecta la validez del benchmark (rota 4 targets pero dos son el mismo archivo, y uno es desproporcionadamente pesado).
+- Ubicación: `pdf-extractext-infrastructure/tests/load/pdfs/`.
+- Motivo de no versionado: excluidos por `.gitignore:18`; ver `FIND-001`/`FIND-002`.
 - La ruta del enunciado `tests/stress/pdfs` **no existe** en ningún repo (`FIND-001`, `ASK-002`).
 
 ### 1.3 Fixtures generables (no versionados, regenerables)
@@ -115,9 +116,9 @@ Coherencia estática observada: `run_vegeta.sh` fija `DURATION=30s`, `TIMEOUT=30
 |---|---|---|
 | Stack Docker con Traefik + TLS | Por verificar en runtime | Requiere `make certs` (mkcert) y `make up`; certs no generados en este entorno de auditoría |
 | `k6`, `vegeta`, `jq` instalados en el host | No verificado | Los scripts hacen `command -v` con fail-fast |
-| 4 PDFs oficiales en `tests/load/pdfs/` | **FALTAN** | `FIND-001` / `ASK-001` |
+| 4 PDFs oficiales en `tests/load/pdfs/` | **Presentes localmente, no versionados** | `FIND-001`; uno de ellos (`Essential-Kanban…`) es un duplicado de `heavy.292.pdf` → `FIND-011` |
 | `pdf-extractext.localhost` resuelve a 127.0.0.1 | No verificado | README requiere ajuste manual en WSL/glibc |
-| Suite de registro (`record-run.sh`) | Presente | `scripts/record-run.sh`; `docs/test-runs/` vacío salvo `TEMPLATE.md` |
+| Suite de registro (`record-run.sh`) | Presente | `scripts/record-run.sh`; `docs/test-runs/` con `TEMPLATE.md` versionado + 5 corridas locales (gitignoreadas) |
 | Réplicas de Extraction configurables 1–5 | Verificado (código) | `Makefile:check` valida el rango antes de `make up` |
 
 ---

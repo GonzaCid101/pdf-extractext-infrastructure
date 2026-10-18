@@ -19,7 +19,7 @@ Mapeo 1:1 con el ADR de Infrastructure. Estado = lo que la auditoría pudo confi
 | `DEC-06` | D6 | Build desde repos hermanos (`*_CONTEXT`) | `.env.example:9-25`, `Makefile:check` valida existencia de contextos y Dockerfiles | `[VERIFICADO-CÓDIGO]` |
 | `DEC-07` | D7 | MongoDB `mongo:8` definitivo; coordinar Persistence (tests en `mongo:7.0`) | **RESUELTO (2026-10-17):** el código de tests ya usaba `mongo:8` (`mongoImage()`); se alineó el README de Persistence a `mongo:8` y D7 en el ADR (`FIND-006`). Compilación verificada con `go vet -tags=integration` | **`[RESUELTO - IMPLEMENTADO]`** |
 | `DEC-08` | D8 | Healthchecks in-container + `depends_on: service_healthy` | **RESUELTO (2026-10-17):** D8 reescrito documentando el mecanismo real (`/healthprobe` en api/persistence, `python3 -c urllib … /readyz` en extraction, `mongosh ping` en Mongo), orden de arranque y justificación de no usar `curl` en distroless (`FIND-006`) | **`[RESUELTO - IMPLEMENTADO]`** |
-| `DEC-09` | D9 | Límites CPU/mem por instancia; réplicas Extraction 1–5 | Compose: límites en los 5 servicios; `Makefile:22-25` valida rango 1–5 | `[VERIFICADO-CÓDIGO]` |
+| `DEC-09` | D9 | Límites CPU/mem por instancia; réplicas Extraction 1–5 | Compose: límites en los 5 servicios; `Makefile:22-25` valida rango 1–5. **ADR D9 corregido el 2026-10-18** (antes decía "resto sin límites", contradiciendo al compose) → `FIND-009` | `[VERIFICADO-CÓDIGO]` |
 | `DEC-10` | D10 | Saturación = 503 + `Retry-After` implementado por Extraction | `admission.py` + `errors.py` en extractor; middleware de admisión presente | `[VERIFICADO-CÓDIGO]` (comportamiento bajo carga: pendiente Etapa 3/4) |
 | `DEC-11` | D11 | Herramientas de carga: k6 (spike 100 VUs, abierto ≥25 req/s) + Vegeta (50 req/s × 30s, timeout 30s) | Perfil de duración/timeout de Vegeta coincide (`DURATION=30s`, `TIMEOUT=30s`, `-insecure`), **pero el rate está en 1/s, no 50/s** → `FIND-007`; **k6 cableado a 1 VU** → `FIND-003` | `[VERIFICADO-CÓDIGO]` con gaps en ambas herramientas |
 | `DEC-12` | D12 | Sin CI por ahora; smoke local | Existe `.github/workflows/ci.yml` solo en `pdf-extractext-api` (repo propio); Infrastructure sin CI, `make smoke` local | `[VERIFICADO-CÓDIGO]` |
@@ -35,8 +35,8 @@ Nota: el README de API (`README.md:26-27`) aún afirma que "esta API todavía no
 
 | ID | Contradicción | Fuente A | Fuente B | Hallazgo | Estado |
 |---|---|---|---|---|---|
-| `CON-001` | README de Infrastructure: "PDFs oficiales (tests/load/pdfs/): los 4 del profesor. **Sin** generate_fixtures.sh" | `README.md:86-87` | Realidad: solo existe `generate_fixtures.sh` en esa carpeta; los 4 PDFs no están | `FIND-002` | Abierta |
-| `CON-002` | `.gitignore` comenta que los PDFs "ya están copiados en el repositorio" pero los ignora con `tests/load/pdfs/*.pdf` | `.gitignore:15-18` | Realidad: 0 PDFs en el repo | `FIND-002` | Abierta |
+| `CON-001` | README de Infrastructure: "PDFs oficiales (tests/load/pdfs/): los 4 del profesor. **Sin** generate_fixtures.sh" | `README.md` (sección de carga) | Realidad: los PDFs existen localmente pero **no están versionados** | `FIND-002` | **Resuelta** (2026-10-18: README reescrito) |
+| `CON-002` | `.gitignore` comentaba que los PDFs "ya están copiados en el repositorio" pero los ignora con `tests/load/pdfs/*.pdf` | `.gitignore:15-21` | Realidad: son locales y no versionados | `FIND-002` | **Resuelta** (2026-10-18: comentario reescrito) |
 | `CON-003` | README de API describe bootstrap sin orquestación ni persistencia | `README.md:78-86, 134-150` | `cmd/api/main.go:32-40` (registra `/extract`, `/upload-pdf`, CRUD `/documents`) | `FIND-004` | Abierta |
 | `CON-004` | README de Extraction: "solo recepción", respuesta `{filename, size}` | `README.md:3, 36-37` | `extraction.py:10-15` y `domain/extractor.py` (extracción real con PyMuPDF) | `FIND-004` | Abierta |
 | `CON-005` | README de Persistence: "CRUD en etapas posteriores" | `README.md:5` | `internal/api/router.go:26-30` (CRUD completo) | `FIND-004` | Abierta |
@@ -46,6 +46,11 @@ Nota: el README de API (`README.md:26-27`) aún afirma que "esta API todavía no
 | `CON-009` | ADR D8 describe healthchecks con `curl` + CMD-SHELL; implementación real usa binario `/healthprobe` y `python3 -c urllib` | `architecture-decisions.md:55` | `docker-compose.yml:45-48, 93-98, 121-126` | `FIND-006` | **Resuelta** (D8 reescrito) |
 | `CON-010` | Enunciado pide `content` convertido a Markdown; el código extrae texto plano y ningún repo contiene código Markdown | Enunciado TP | `domain/extractor.py:35`; grep `markdown` = 0 resultados | `FIND-005` | **Resuelta** (`ASK-005`; Markdown implementado) |
 | `CON-011` | `run_vegeta.sh`, README y ADR D11 documentan "50 req/s × 30s"; el script está hardcoded a `RATE="1/s"` (~30 reqs en 30s, no 1.500) | `run_vegeta.sh:2,21`, `README.md:76`, `architecture-decisions.md:71` | `run_vegeta.sh:21,71` (`RATE="1/s"`, `-rate="$RATE"`) | `FIND-007` | Abierta (`ASK-008`) |
+| `CON-012` | El informe técnico presentaba métricas de scaling como reales citando archivos "simulado" inexistentes | `informe_tecnico.md:47-84` (versión previa) | `docs/test-runs/` no contiene `20261007T100000Z-k6-1-replica.md` ni `...-5-replicas.md` | `FIND-008` | **Resuelta** (2026-10-18: sección neutralizada) |
+| `CON-013` | ADR D9 decía "resto de servicios: sin límites en desarrollo local"; el compose fija límites en los 5 servicios | `architecture-decisions.md` D9 (previo) | `docker-compose.yml` (5 × `deploy.resources.limits`) | `FIND-009` | **Resuelta** (2026-10-18: D9 corregido) |
+| `CON-014` | `.env.example` citaba `docs/pending-decisions.md`, archivo eliminado y reemplazado por `docs/architecture-decisions.md` | `.env.example:3` (previo) | `docs/architecture-decisions.md` existe; `docs/pending-decisions.md` no | `FIND-009` | **Resuelta** (2026-10-18) |
+| `CON-015` | README de Infrastructure decía que `make smoke` verifica "14 checks"; el script implementa 15 | `README.md:42` (previo) | `scripts/smoke.sh` (checks 1–15) | `FIND-010` | **Resuelta** (2026-10-18: README corregido) |
+| `CON-016` | El conjunto de carga se presenta como "4 PDFs oficiales" distintos, pero `Essential-Kanban-Condensed-Spanish.pdf` es idéntico a `heavy.292.pdf` del extractor | `tests/load/pdfs/Essential-Kanban-Condensed-Spanish.pdf` | `pdf-extractext-extractor/tests/data/heavy.292.pdf` (mismo SHA-256) | `FIND-011` | Abierta |
 
 ---
 
@@ -53,14 +58,15 @@ Nota: el README de API (`README.md:26-27`) aún afirma que "esta API todavía no
 
 | ID | Pregunta | Contexto | Bloquea | Prioridad |
 |---|---|---|---|---|
-| `ASK-001` | ¿Pueden copiar los 4 PDFs oficiales (`2020-Scrum-Guide-Spanish-Latin-South-American.pdf`, `Essential-Kanban-Condensed-Spanish.pdf`, `Filosofia Lean.pdf`, `scrum_manager_historias_usuario.pdf`) a `tests/load/pdfs/` del repo Infrastructure? | Sin ellos no se pueden ejecutar `make load-vegeta` ni `spike_tests.js` (k6). No bloquean Etapas 2, 3A, 3B, 3C ni 4 (auditoría estática). | Benchmarks reales (Etapa 3/4) | **Alta** |
+| `ASK-001` | ~~¿Pueden copiar los 4 PDFs oficiales (`2020-Scrum-Guide-Spanish-Latin-South-American.pdf`, `Essential-Kanban-Condensed-Spanish.pdf`, `Filosofia Lean.pdf`, `scrum_manager_historias_usuario.pdf`) a `tests/load/pdfs/` del repo Infrastructure?~~ | **`[RESUELTO]` (2026-10-18).** Los 4 PDFs están presentes localmente en `tests/load/pdfs/`. Decisión del equipo: **no versionarlos** (documentado en README/`.gitignore`). Ver `FIND-001`. | Benchmarks reales (Etapa 3/4) | — |
 | `ASK-002` | ¿La ruta del enunciado `tests/stress/pdfs` designa el mismo conjunto que `tests/load/pdfs` del repo, o existe otro repositorio/carpetas no clonados en este workspace? | Ningún repo contiene `tests/stress/`; el workspace solo tiene los 4 repos clonados. | Clarar alcance del conjunto oficial | **Alta** |
 | `ASK-003` | ¿Cuál es el script k6 canónico del TP: `k6-spike.js` (100 VUs, usa fixtures generados `fixture-*.pdf`) o `spike_tests.js` (1 VU, usa los 4 PDFs oficiales)? `make load-k6` hoy ejecuta el segundo. | `FIND-003`. La auditoría no puede asumir cuál refleja la intención del equipo ni modificar scripts. | Comparabilidad de resultados k6 con la referencia | **Alta** |
-| `ASK-004` | ¿Dónde están registradas las corridas que produjeron las cifras de referencia (1.037 reqs / 25,35 req/s k6; 998 exitosas / 501 timeouts Vegeta)? `docs/test-runs/` solo tiene `TEMPLATE.md`. | Las cifras provienen del enunciado de la cátedra; no fueron reproducidas ni verificadas en esta auditoría. | Contraste de benchmarks | Media |
+| `ASK-004` | ¿Dónde están registradas las corridas que produjeron las cifras de referencia (1.037 reqs / 25,35 req/s k6; 998 exitosas / 501 timeouts Vegeta)? | **Parcialmente respondida (2026-10-18):** existen 5 corridas locales en `docs/test-runs/` (3 k6 + 2 Vegeta, del 2026-10-16), pero están **gitignoreadas** (no versionadas) y usan los perfiles aún no corregidos (`FIND-003`/`FIND-007`), por lo que no son comparables con la referencia del TP. | Contraste de benchmarks | Media |
 | `ASK-005` | ~~¿"content convertido a Markdown cuando corresponda" exige transformación real o acepta texto plano?~~ | **`[RESUELTO E IMPLEMENTADO]` (2026-10-17).** El equipo decidió implementar conversión real a Markdown nativo en el extractor. Ver "Registro de Resoluciones" abajo. | — | — |
 | `ASK-006` | ~~¿Se alinean los tests de integración de Persistence a `mongo:8` (D7) o se mantiene `mongo:7.0`?~~ | **`[RESUELTO E IMPLEMENTADO]` (2026-10-17).** Confirmado `mongo:8` en tests y README; D7/D8 del ADR actualizados. Ver "Registro de Resoluciones" abajo. | — | — |
 | `ASK-007` | ¿Es correcto tratar `.env` de Infrastructure como artefacto local no auditado (contiene credenciales dev)? Confirmar si hay algún valor crítico distinto de `.env.example` que debamos conocer. | El `.env` existe en disco pero no fue releído por contención con secretos. | Claridad de entorno | Baja |
 | `ASK-008` | `run_vegeta.sh` está hardcoded a `RATE="1/s"` mientras el TP, el README y el ADR D11 exigen 50 req/s. ¿El rate intencional es 50 req/s (corregir el script por el equipo) o 1/s es una reducción deliberada de ensayo? | `FIND-007` / `CON-011`. La auditoría no modifica scripts ni ejecuta cargas. | Comparabilidad Vegeta vs referencia del TP (1.500 reqs) | **Alta** |
+| `ASK-009` | `tests/load/pdfs/Essential-Kanban-Condensed-Spanish.pdf` es idéntico a `heavy.292.pdf` del extractor. ¿Cuál es el documento oficial real que debe ocupar ese lugar? ¿Se pueden verificar los hashes de los 4 PDFs del conjunto? | `FIND-011` / `CON-016`. Afecta la validez de la rotación de 4 documentos. | Validez de los benchmarks de carga | **Alta** |
 
 ---
 
@@ -89,3 +95,32 @@ Nota: el README de API (`README.md:26-27`) aún afirma que "esta API todavía no
   - (El código de tests ya usaba `mongo:8` vía `mongoImage()` en `internal/infra/mongo/client_integration_test.go:27-32`.)
 - **Verificación `[VERIFICADO-PRUEBA]`:** `go build ./...` OK; `go vet -tags=integration ./...` OK; `go test ./...` OK (los tests de integración requieren Docker y no se ejecutaron).
 - **Detalle completo:** ver bloque "Implementación Realizada y Verificación" en `audit-findings.md` (`FIND-006`).
+
+---
+
+## Registro de Resoluciones — re-verificación 2026-10-18
+
+> Sesión de alineación de la Etapa 1: se contrastaron los documentos de `audit/` contra el estado real del repositorio y se corrigieron las desviaciones documentales detectadas. Todas las modificaciones son de documentación (y una robustez menor de script); no cambian comportamiento del sistema.
+
+### R-03 — Artefactos de carga y contradicciones documentales (`FIND-001`, `FIND-002`, `CON-001`, `CON-002`, `ASK-001`, `ASK-004`)
+
+- **Hallazgo de la re-verificación:** los 4 PDFs oficiales **están presentes** en `tests/load/pdfs/` y hay **5 corridas registradas** locales en `docs/test-runs/`; ambos siguen gitignoreados.
+- **Decisión del equipo:** mantener PDFs y corridas **fuera de git** (locales) y documentarlo; no versionar.
+- **Archivos modificados:** `README.md` (aclaraciones de artefactos locales + nota de perfiles en corrección), `.gitignore` (comentarios reescritos).
+- **Detalle:** `FIND-001`, `FIND-002`.
+
+### R-04 — Informe técnico con métricas simuladas (`FIND-008`, `CON-012`)
+
+- **Decisión del equipo:** neutralizar las cifras simuladas; no inventar reemplazos.
+- **Archivos modificados:** `docs/informe_tecnico.md` → §4 reescrita como "pendiente de corridas válidas" con tablas vacías; se quitó la referencia a los archivos de corrida inexistentes.
+- **Detalle:** `FIND-008`.
+
+### R-05 — Deriva del ADR y del README de Infrastructure (`FIND-009`, `FIND-010`, `CON-013`, `CON-014`, `CON-015`)
+
+- **Decisión del equipo:** alinear ADR, `.env.example` y README con la implementación real.
+- **Archivos modificados:**
+  - `docs/architecture-decisions.md` → D9 (tabla real de límites de los 5 servicios) y D5 (`API_TAG`).
+  - `.env.example` → referencia `docs/pending-decisions.md` → `docs/architecture-decisions.md`.
+  - `README.md` → "14 checks" → "15 checks".
+  - `scripts/record-run.sh` → `mongo_version()` robustecido (evita versión espuria "desconocida").
+- **Detalle:** `FIND-009`, `FIND-010`.

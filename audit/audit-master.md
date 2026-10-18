@@ -14,7 +14,7 @@ Carpeta autorizada: `pdf-extractext-infrastructure/audit/` (único lugar válido
 
 | Etapa | Nombre | Estado | Notas |
 |---|---|---|---|
-| Etapa 1 | Relevamiento estructural y línea base | **COMPLETADA (2026-10-17)** | 4/4 repositorios inventariados. `FIND-001`…`FIND-007` abiertos; `FIND-005` y `FIND-006` resueltos ese mismo día (§8). |
+| Etapa 1 | Relevamiento estructural y línea base | **COMPLETADA (2026-10-17); RE-VERIFICADA (2026-10-18)** | 4/4 repositorios inventariados. `FIND-001`…`FIND-007` definidos; `FIND-005` y `FIND-006` resueltos el 2026-10-17. Re-verificación 2026-10-18: se ajustaron `FIND-001`/`FIND-002`, se agregaron `FIND-008`…`FIND-011` y se alinearon los documentos de infraestructura (§8). |
 | Etapa 2 | Auditoría de arquitectura y contratos | PENDIENTE | Insumo: secciones `INT-XX` de este archivo + `DEC-XX`/`CON-XX` de `audit-decisions.md`. |
 | Etapa 3A | (definida por el equipo) | PENDIENTE | — |
 | Etapa 3B | (definida por el equipo) | PENDIENTE | — |
@@ -127,8 +127,8 @@ Se llena a partir de la Etapa 2 (contratos inter-servicio verificados en código
 
 | Ítem | Motivo | Necesidad |
 |---|---|---|
-| Cifras de benchmark reales (k6/Vegeta) | `docs/test-runs/` solo contiene `TEMPLATE.md`; no hay corridas registradas en los repos. | Corridas reales en Etapa 3/4 con el stack levantado. |
-| Conjunto oficial de PDFs (`tests/stress/pdfs` o `tests/load/pdfs/*.pdf`) | No existe en ningún repo; `.gitignore` excluye `tests/load/pdfs/*.pdf`. | `ASK-001` / `FIND-001`. |
+| Cifras de benchmark reales (k6/Vegeta) | Re-verificación 2026-10-18: hay 5 corridas locales en `docs/test-runs/` (gitignoreadas), pero con perfiles aún no corregidos (`FIND-003`/`FIND-007`); no hay corridas válidas versionadas. | Corridas reales en Etapa 3/4 con los perfiles corregidos. |
+| Conjunto oficial de PDFs (`tests/stress/pdfs` o `tests/load/pdfs/*.pdf`) | Re-verificación 2026-10-18: los 4 PDFs están presentes localmente en `tests/load/pdfs/`, pero `.gitignore` los excluye (no versionados). `tests/stress/pdfs` sigue sin existir. | `ASK-002` / `FIND-001`. |
 | Comportamiento en runtime (respuestas HTTP, latencias, saturación 503) | Etapa 1 es estática; no se ejecutaron servicios ni cargas (restricción 6). | Etapas 3A–4. |
 | Contenido de `.env` de Infrastructure | Presente en disco pero no releído por contención con secretos (aunque es un `.env` de desarrollo local, `.gitignore` lo excluye). | `ASK-007` si algún dato de entorno es crítico. |
 | Ejecución efectiva de los tests de integración de Persistence | Requieren Docker/testcontainers; en esta sesión solo se verificó su compilación (`go vet -tags=integration`). | Etapa 2/3 si se habilita Docker. |
@@ -150,3 +150,22 @@ Sesión de implementación acotada del **2026-10-17** (previa a la Etapa 2). Aut
 | C-07 | `pdf-extractext-persistence` | `internal/infra/mongo/client_integration_test.go` | — | **Sin cambios:** el código ya usaba `mongo:8` vía `mongoImage()`; se confirmó y documentó | `go test ./...` OK | `FIND-006` |
 
 **Estado de los hallazgos tras la sesión:** `FIND-005` y `FIND-006` → `[RESUELTO - IMPLEMENTADO]`. Siguen abiertos: `FIND-001`, `FIND-002`, `FIND-003`, `FIND-004`, `FIND-007` (documentación de READMEs y scripts de carga, fuera del alcance autorizado de esta sesión).
+
+### Sesión de re-verificación y alineación del 2026-10-18
+
+Contraste de los documentos de `audit/` contra el estado real y corrección de las desviaciones documentales detectadas. Solo documentación (más una robustez menor de script); sin cambios de comportamiento.
+
+| # | Repositorio | Archivo | Tipo | Descripción del cambio | Hallazgo / decisión |
+|---|---|---|---|---|---|
+| C-08 | `pdf-extractext-infrastructure` | `README.md` | doc | "14 checks" → "15 checks"; aclaraciones de que PDFs y corridas son locales; nota de perfiles de carga en corrección | `FIND-010` / `CON-015` |
+| C-09 | `pdf-extractext-infrastructure` | `.gitignore` | doc | Comentarios reescritos: PDFs y `docs/test-runs/` no se versionan; eliminada la negación muerta `!docs/test-runs/.gitkeep` | `FIND-001` / `FIND-002` / `CON-001` / `CON-002` |
+| C-10 | `pdf-extractext-infrastructure` | `docs/architecture-decisions.md` | doc | D9 con la tabla real de límites de los 5 servicios; D5 incluye `API_TAG` | `FIND-009` / `CON-013` |
+| C-11 | `pdf-extractext-infrastructure` | `.env.example` | doc | Referencia `docs/pending-decisions.md` → `docs/architecture-decisions.md` | `FIND-009` / `CON-014` |
+| C-12 | `pdf-extractext-infrastructure` | `docs/informe_tecnico.md` | doc | §4 neutralizada: se quitaron las cifras "simuladas" y los archivos de corrida inexistentes; queda "pendiente de corridas válidas" | `FIND-008` / `CON-012` |
+| C-13 | `pdf-extractext-infrastructure` | `scripts/record-run.sh` | código | `mongo_version()` robustecido (evita emitir "desconocida" espuria) | `FIND-010` |
+| C-14 | `pdf-extractext-infrastructure` | `audit/*.md` | doc | Re-verificación de la Etapa 1: `FIND-001`/`FIND-002` ajustados; nuevos `FIND-008`…`FIND-011`, `RC-004`…`RC-006`, `CON-012`…`CON-016`; `ASK-001`/`ASK-004` actualizadas y `ASK-009` agregada | `FIND-011` (PDF oficial duplicado) |
+
+**Estado de los hallazgos tras la re-verificación (2026-10-18):**
+- Resueltos: `FIND-002`, `FIND-005`, `FIND-006`, `FIND-008`, `FIND-009`, `FIND-010`.
+- Parcialmente mitigado: `FIND-001` (PDFs presentes localmente; decisión de no versionarlos).
+- Abiertos: `FIND-003` (k6 a 1 VU), `FIND-004` (READMEs de los servicios), `FIND-007` (Vegeta a 1 req/s), `FIND-011` (PDF oficial duplicado).
