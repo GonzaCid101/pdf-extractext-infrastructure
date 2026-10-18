@@ -115,11 +115,11 @@ traefik_version() {
 }
 
 mongo_version() {
-	local id
+	local id v
 	id="$(first_id mongodb)"
 	[[ -n "$id" ]] || { echo "—"; return; }
-	docker exec "$id" mongod --version 2>/dev/null | awk '/^db version/{print $3; exit}' \
-		|| echo "desconocida"
+	v="$(docker exec "$id" mongod --version 2>/dev/null | awk '/^db version/{print $3; exit}' || true)"
+	echo "${v:-desconocida}"
 }
 
 # --- Validación de stack ---
