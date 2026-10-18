@@ -35,14 +35,14 @@ Nota: el README de API (`README.md:26-27`) aún afirma que "esta API todavía no
 
 | ID | Contradicción | Fuente A | Fuente B | Hallazgo | Estado |
 |---|---|---|---|---|---|
-| `CON-001` | README de Infrastructure: "PDFs oficiales (tests/load/pdfs/): los 4 del profesor. **Sin** generate_fixtures.sh" | `README.md` (sección de carga) | Realidad: los PDFs existen localmente pero **no están versionados** | `FIND-002` | **Resuelta** (2026-10-18: README reescrito) |
-| `CON-002` | `.gitignore` comentaba que los PDFs "ya están copiados en el repositorio" pero los ignora con `tests/load/pdfs/*.pdf` | `.gitignore:15-21` | Realidad: son locales y no versionados | `FIND-002` | **Resuelta** (2026-10-18: comentario reescrito) |
-| `CON-003` | README de API describe bootstrap sin orquestación ni persistencia | `README.md:78-86, 134-150` | `cmd/api/main.go:32-40` (registra `/extract`, `/upload-pdf`, CRUD `/documents`) | `FIND-004` | Abierta |
-| `CON-004` | README de Extraction: "solo recepción", respuesta `{filename, size}` | `README.md:3, 36-37` | `extraction.py:10-15` y `domain/extractor.py` (extracción real con PyMuPDF) | `FIND-004` | Abierta |
-| `CON-005` | README de Persistence: "CRUD en etapas posteriores" | `README.md:5` | `internal/api/router.go:26-30` (CRUD completo) | `FIND-004` | Abierta |
-| `CON-006` | README de API: "Esta API todavía no está declarada en ese compose" | `README.md:26-27` | Infrastructure `docker-compose.yml:28-66` define el servicio `api` (D15 resuelta) | `FIND-004` | Abierta |
+| `CON-001` | README de Infrastructure: "PDFs oficiales (tests/load/pdfs/): los 4 del profesor. **Sin** generate_fixtures.sh" | `README.md` (sección de carga) | Realidad: los PDFs existen y ahora **se versionan** en el repo | `FIND-002` | **Resuelta** (2026-10-18: PDFs versionados; README actualizado) |
+| `CON-002` | `.gitignore` comentaba que los PDFs "ya están copiados en el repositorio" pero los ignoraba con `tests/load/pdfs/*.pdf` | `.gitignore` | Realidad: ahora la regla de exclusión se eliminó y se versionan | `FIND-002` | **Resuelta** (2026-10-18) |
+| `CON-003` | README de API describía bootstrap sin orquestación ni persistencia | `README.md` (previo) | `cmd/api/main.go:36-40` (registra `/extract`, `/upload-pdf`, CRUD `/documents`) | `FIND-004` | **Resuelta** (2026-10-18: README reescrito) |
+| `CON-004` | README de Extraction: "solo recepción", respuesta `{filename, size}` | `README.md` (previo) | `extraction.py` + `domain/extractor.py` (extracción real con PyMuPDF a Markdown) | `FIND-004` | **Resuelta** (2026-10-18: README actualizado) |
+| `CON-005` | README de Persistence: "CRUD en etapas posteriores" | `README.md` (previo) | `internal/api/router.go:26-37` (CRUD + probes completos) | `FIND-004` | **Resuelta** (2026-10-18: README actualizado) |
+| `CON-006` | README de API: "Esta API todavía no está declarada en ese compose" | `README.md` (previo) | Infrastructure `docker-compose.yml` define el servicio `api` (D15 resuelta) | `FIND-004` | **Resuelta** (2026-10-18: README actualizado) |
 | `CON-007` | README de Infrastructure documenta `make load-k6` como spike a 100 VUs; el script ejecutado usa 1 VU | `README.md:75, 81-83` | `run_k6.sh:21` → `spike_tests.js:9-11` (`target: 1`) | `FIND-003` | Abierta |
-| `CON-008` | Enunciado de la cátedra: `tests/stress/pdfs`; repos: `tests/load/pdfs` (y vacío de PDFs) | Enunciado TP | Filesystem de los 4 repos | `FIND-001` | Abierta (`ASK-002`) |
+| `CON-008` | Enunciado de la cátedra: `tests/stress/pdfs`; repos: `tests/load/pdfs` (ahora con los 4 PDFs versionados) | Enunciado TP | Filesystem de los 4 repos | `FIND-001` | Abierta (`ASK-002`) |
 | `CON-009` | ADR D8 describe healthchecks con `curl` + CMD-SHELL; implementación real usa binario `/healthprobe` y `python3 -c urllib` | `architecture-decisions.md:55` | `docker-compose.yml:45-48, 93-98, 121-126` | `FIND-006` | **Resuelta** (D8 reescrito) |
 | `CON-010` | Enunciado pide `content` convertido a Markdown; el código extrae texto plano y ningún repo contiene código Markdown | Enunciado TP | `domain/extractor.py:35`; grep `markdown` = 0 resultados | `FIND-005` | **Resuelta** (`ASK-005`; Markdown implementado) |
 | `CON-011` | `run_vegeta.sh`, README y ADR D11 documentan "50 req/s × 30s"; el script está hardcoded a `RATE="1/s"` (~30 reqs en 30s, no 1.500) | `run_vegeta.sh:2,21`, `README.md:76`, `architecture-decisions.md:71` | `run_vegeta.sh:21,71` (`RATE="1/s"`, `-rate="$RATE"`) | `FIND-007` | Abierta (`ASK-008`) |
@@ -58,9 +58,9 @@ Nota: el README de API (`README.md:26-27`) aún afirma que "esta API todavía no
 
 | ID | Pregunta | Contexto | Bloquea | Prioridad |
 |---|---|---|---|---|
-| `ASK-001` | ~~¿Pueden copiar los 4 PDFs oficiales (`2020-Scrum-Guide-Spanish-Latin-South-American.pdf`, `Essential-Kanban-Condensed-Spanish.pdf`, `Filosofia Lean.pdf`, `scrum_manager_historias_usuario.pdf`) a `tests/load/pdfs/` del repo Infrastructure?~~ | **`[RESUELTO]` (2026-10-18).** Los 4 PDFs están presentes localmente en `tests/load/pdfs/`. Decisión del equipo: **no versionarlos** (documentado en README/`.gitignore`). Ver `FIND-001`. | Benchmarks reales (Etapa 3/4) | — |
+| `ASK-001` | ~~¿Pueden copiar los 4 PDFs oficiales (`2020-Scrum-Guide-Spanish-Latin-South-American.pdf`, `Essential-Kanban-Condensed-Spanish.pdf`, `Filosofia Lean.pdf`, `scrum_manager_historias_usuario.pdf`) a `tests/load/pdfs/` del repo Infrastructure?~~ | **`[RESUELTO]` (2026-10-18).** Los 4 PDFs están presentes y ahora **se versionan** en `tests/load/pdfs/` (se eliminó la exclusión de `.gitignore`). Ver `FIND-001`; queda abierto el dato duplicado (`FIND-011`). | Benchmarks reales (Etapa 3/4) | — |
 | `ASK-002` | ¿La ruta del enunciado `tests/stress/pdfs` designa el mismo conjunto que `tests/load/pdfs` del repo, o existe otro repositorio/carpetas no clonados en este workspace? | Ningún repo contiene `tests/stress/`; el workspace solo tiene los 4 repos clonados. | Clarar alcance del conjunto oficial | **Alta** |
-| `ASK-003` | ¿Cuál es el script k6 canónico del TP: `k6-spike.js` (100 VUs, usa fixtures generados `fixture-*.pdf`) o `spike_tests.js` (1 VU, usa los 4 PDFs oficiales)? `make load-k6` hoy ejecuta el segundo. | `FIND-003`. La auditoría no puede asumir cuál refleja la intención del equipo ni modificar scripts. | Comparabilidad de resultados k6 con la referencia | **Alta** |
+| `ASK-003` | ~~¿Cuál es el script k6 canónico del TP: `k6-spike.js` (100 VUs, usa fixtures generados `fixture-*.pdf`) o `spike_tests.js` (1 VU, usa los 4 PDFs oficiales)? `make load-k6` hoy ejecuta el segundo.~~ | **`[RESUELTO]` (2026-10-18).** Canónico = `spike_tests.js`; `k6-spike.js` y `generate_fixtures.sh` fueron eliminados. El salto a 100 VUs queda pendiente hasta la etapa final de benchmarks (`FIND-003`). | Comparabilidad de resultados k6 con la referencia | — |
 | `ASK-004` | ¿Dónde están registradas las corridas que produjeron las cifras de referencia (1.037 reqs / 25,35 req/s k6; 998 exitosas / 501 timeouts Vegeta)? | **Parcialmente respondida (2026-10-18):** existen 5 corridas locales en `docs/test-runs/` (3 k6 + 2 Vegeta, del 2026-10-16), pero están **gitignoreadas** (no versionadas) y usan los perfiles aún no corregidos (`FIND-003`/`FIND-007`), por lo que no son comparables con la referencia del TP. | Contraste de benchmarks | Media |
 | `ASK-005` | ~~¿"content convertido a Markdown cuando corresponda" exige transformación real o acepta texto plano?~~ | **`[RESUELTO E IMPLEMENTADO]` (2026-10-17).** El equipo decidió implementar conversión real a Markdown nativo en el extractor. Ver "Registro de Resoluciones" abajo. | — | — |
 | `ASK-006` | ~~¿Se alinean los tests de integración de Persistence a `mongo:8` (D7) o se mantiene `mongo:7.0`?~~ | **`[RESUELTO E IMPLEMENTADO]` (2026-10-17).** Confirmado `mongo:8` en tests y README; D7/D8 del ADR actualizados. Ver "Registro de Resoluciones" abajo. | — | — |
@@ -102,12 +102,12 @@ Nota: el README de API (`README.md:26-27`) aún afirma que "esta API todavía no
 
 > Sesión de alineación de la Etapa 1: se contrastaron los documentos de `audit/` contra el estado real del repositorio y se corrigieron las desviaciones documentales detectadas. Todas las modificaciones son de documentación (y una robustez menor de script); no cambian comportamiento del sistema.
 
-### R-03 — Artefactos de carga y contradicciones documentales (`FIND-001`, `FIND-002`, `CON-001`, `CON-002`, `ASK-001`, `ASK-004`)
+### R-03 — Artefactos de carga y contradicciones documentales (`FIND-001`, `FIND-002`, `CON-001`, `CON-002`, `CON-008`, `ASK-001`, `ASK-004`)
 
-- **Hallazgo de la re-verificación:** los 4 PDFs oficiales **están presentes** en `tests/load/pdfs/` y hay **5 corridas registradas** locales en `docs/test-runs/`; ambos siguen gitignoreados.
-- **Decisión del equipo:** mantener PDFs y corridas **fuera de git** (locales) y documentarlo; no versionar.
-- **Archivos modificados:** `README.md` (aclaraciones de artefactos locales + nota de perfiles en corrección), `.gitignore` (comentarios reescritos).
-- **Detalle:** `FIND-001`, `FIND-002`.
+- **Hallazgo de la re-verificación:** los 4 PDFs oficiales **están presentes** en `tests/load/pdfs/` y hay **5 corridas registradas** locales en `docs/test-runs/`; los PDFs estaban gitignoreados.
+- **Decisión del equipo (revisada):** **versionar los 4 PDFs** para que un clon limpio pueda correr las pruebas (se eliminó la regla `tests/load/pdfs/*.pdf`). Las corridas de `docs/test-runs/` siguen siendo **locales** (no se versionan).
+- **Archivos modificados:** `.gitignore` (regla de exclusión eliminada; comentarios actualizados), `README.md` (PDFs ahora versionados + aclaración de corridas locales + nota de perfiles en corrección).
+- **Detalle:** `FIND-001`, `FIND-002`. Queda abierto `FIND-011` (uno de los PDFs está duplicado).
 
 ### R-04 — Informe técnico con métricas simuladas (`FIND-008`, `CON-012`)
 
@@ -124,3 +124,14 @@ Nota: el README de API (`README.md:26-27`) aún afirma que "esta API todavía no
   - `README.md` → "14 checks" → "15 checks".
   - `scripts/record-run.sh` → `mongo_version()` robustecido (evita versión espuria "desconocida").
 - **Detalle:** `FIND-009`, `FIND-010`.
+
+### R-06 — READMEs de los servicios desactualizados (`FIND-004`, `CON-003`…`CON-006`)
+
+- **Hallazgo:** los README de `pdf-extractext-api`, `pdf-extractext-extractor` y `pdf-extractext-persistence` describían un estado "bootstrap" que el código ya superó.
+- **Decisión del equipo:** actualizarlos al estado real (solo documentación).
+- **Archivos modificados (en repos hermanos):**
+  - `pdf-extractext-api/README.md` → endpoints reales (`/`, `/extract`, `/upload-pdf`, CRUD `/documents`), variables, errores, estructura, CI; `pdf-extractext-api/.env.example` → comentario de `PERSISTENCE_URL` alineado.
+  - `pdf-extractext-extractor/README.md` → contrato real de `POST /extract` (5 campos, Markdown), `/readyz`, estructura.
+  - `pdf-extractext-persistence/README.md` → sección de API (CRUD + probes), estado y estructura reales.
+- **Pendiente relacionado:** ampliar `pdf-extractext-api/docs/openapi.yaml` (hoy solo `/` y `/upload-pdf`).
+- **Detalle:** `FIND-004`.

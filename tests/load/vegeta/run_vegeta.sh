@@ -1,14 +1,8 @@
 #!/usr/bin/env bash
-# run_vegeta.sh — ataque Vegeta 50 req/s × 30s contra POST /extract (4 PDF oficiales).
+# run_vegeta.sh — ataque Vegeta contra POST /extract con los 4 PDFs oficiales.
+# Cada target lleva Content-Length (Vegeta v12 rechaza @archivo); perfil D11: 50 req/s × 30s, timeout 30s, -insecure.
 #
-# Cada target lleva Content-Length para que Vegeta sepa cuántos bytes leer como
-# cuerpo (evitando @archivo, que v12 rechaza con "bad target"). Un único ataque
-# rota uniformemente entre los 4 targets a 50 req/s durante 30s (timeout 30s,
-# -insecure). Perfil (D11): 50 req/s durante 30s, timeout 30s, -insecure (TLS mkcert).
-#
-# Env:
-#   TARGET_URL  endpoint atacado (default: https://pdf-extractext.localhost/extract)
-#   RECORD=0    ataca sin registrar la corrida (ensayo; p.ej. contra un mock)
+# Env: TARGET_URL (default https://pdf-extractext.localhost/extract), RECORD=0 para ensayo sin registrar.
 
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
@@ -42,8 +36,7 @@ for pdf in "${PDFS[@]}"; do
   [ -f "tests/load/pdfs/$pdf" ] || { echo "ERROR: falta tests/load/pdfs/$pdf" >&2; exit 1; }
 done
 
-# Generar los 4 cuerpos multipart (uno por PDF oficial) y un target por cada uno.
-# Cada target incluye Content-Length para que Vegeta lea exactamente el cuerpo.
+# Genera los 4 cuerpos multipart y un target por PDF, cada uno con su Content-Length exacto.
 TARGETS="$WORK/targets.txt"
 : > "$TARGETS"
 for pdf in "${PDFS[@]}"; do

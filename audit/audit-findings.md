@@ -30,8 +30,8 @@ Se derivan de los hallazgos a medida que avanzan las etapas. Todavía sin asigna
 
 | ID | Causa raíz propuesta | Hallazgos asociados | Estado | Etiqueta |
 |---|---|---|---|---|
-| `RC-001` | El conjunto oficial de PDFs nunca se commiteó (excluido por `.gitignore`) y el comentario del `.gitignore`/README quedó desalineado con el estado real del repo. | `FIND-001`, `FIND-002` | Propuesta — requiere confirmación del equipo | `[HIPÓTESIS]` |
-| `RC-002` | Los README de los tres servicios no se actualizaron tras la implementación de funcionalidad posterior al bootstrap (issues de extracción, persistencia y orquestación). | `FIND-004` | Propuesta | `[HIPÓTESIS]` |
+| `RC-001` | El conjunto oficial de PDFs nunca se commiteó (excluido por `.gitignore`) y el comentario del `.gitignore`/README quedó desalineado con el estado real del repo. | `FIND-001`, `FIND-002` | **Resuelta** (2026-10-18): PDFs versionados y textos alineados | `[VERIFICADO-CÓDIGO]` |
+| `RC-002` | Los README de los tres servicios no se actualizaron tras la implementación de funcionalidad posterior al bootstrap (issues de extracción, persistencia y orquestación). | `FIND-004` | **Resuelta** (2026-10-18): READMEs actualizados | `[HIPÓTESIS]` |
 | `RC-003` | Coexisten dos suites de carga (una del repo Extractor y una de Infrastructure) sin definir cuál es la canónica del TP. | `FIND-003` | Propuesta | `[HIPÓTESIS]` |
 | `RC-004` | El informe técnico se redactó con datos de ejemplo/simulados en lugar de corridas reales y no se reemplazaron al obtener mediciones. | `FIND-008` | Propuesta | `[HIPÓTESIS]` |
 | `RC-005` | Los documentos de infraestructura (ADR, README, `.env.example`) evolucionaron sin una revisión de consistencia cruzada tras cada cambio de implementación. | `FIND-009`, `FIND-010` | Propuesta | `[HIPÓTESIS]` |
@@ -46,21 +46,21 @@ Se derivan de los hallazgos a medida que avanzan las etapas. Todavía sin asigna
 | Campo | Valor |
 |---|---|
 | **ID** | `FIND-001` |
-| **Título** | Los 4 PDFs oficiales no están versionados: presentes en disco local pero excluidos por `.gitignore` |
+| **Título** | Los 4 PDFs oficiales no estaban versionados: presentes en disco local pero excluidos por `.gitignore` |
 | **Etapa de detección** | Etapa 1 (re-verificado 2026-10-18) |
 | **Categoría** | testing / configuración |
-| **Severidad** | Media (ya no bloquea las corridas en este entorno, pero impide reproducir la línea base desde un clon limpio) |
+| **Severidad** | Alta (impedía reproducir la línea base desde un clon limpio) |
 | **Repositorio** | Workspace `Microservicios/` (los 4 repos) |
-| **Ubicación** | `pdf-extractext-infrastructure/tests/load/pdfs/` (4 PDFs presentes) y `.gitignore:15-21` (`tests/load/pdfs/*.pdf`). La ruta de la cátedra `tests/stress/pdfs` sigue sin existir en ningún repo. |
-| **Descripción** | **Re-verificación 2026-10-18:** los 4 PDFs oficiales (`2020-Scrum-Guide-Spanish-Latin-South-American.pdf`, `Essential-Kanban-Condensed-Spanish.pdf`, `Filosofia Lean.pdf`, `scrum_manager_historias_usuario.pdf`) **están presentes** en `tests/load/pdfs/`, por lo que `make load-k6` y `make load-vegeta` pueden ejecutarse localmente. Sin embargo **no están versionados** (`.gitignore` los excluye): un clon limpio no los tiene, así que la línea base no es reproducible sin una copia manual. La ruta del enunciado `tests/stress/pdfs` sigue sin existir (se usa `tests/load/pdfs`). |
-| **Evidencia** | - `ls tests/load/pdfs/` → los 4 `.pdf` + `generate_fixtures.sh`. <br> - `git ls-files tests/load/pdfs` → solo `generate_fixtures.sh` (los PDFs no están trackeados). <br> - `git status --ignored` → los 4 `.pdf` figuran como `!!` (ignorados). <br> - `find … -type d -name stress` → sin resultados. |
+| **Ubicación** | `pdf-extractext-infrastructure/tests/load/pdfs/` (4 PDFs) y `.gitignore` (regla `tests/load/pdfs/*.pdf`, ya eliminada). La ruta de la cátedra `tests/stress/pdfs` sigue sin existir en ningún repo. |
+| **Descripción** | Los 4 PDFs oficiales (`2020-Scrum-Guide-Spanish-Latin-South-American.pdf`, `Essential-Kanban-Condensed-Spanish.pdf`, `Filosofia Lean.pdf`, `scrum_manager_historias_usuario.pdf`) estaban presentes en `tests/load/pdfs/` pero **excluidos por `.gitignore`**, por lo que un clon limpio no los tenía y las corridas no eran reproducibles. **Resolución (2026-10-18, revisada):** el equipo decidió **versionarlos**. Se quitó la regla de `.gitignore` y los 4 PDFs se agregan al repo. La ruta del enunciado `tests/stress/pdfs` sigue sin existir (se usa `tests/load/pdfs`). |
+| **Evidencia** | - Estado previo: `git ls-files tests/load/pdfs` → solo `generate_fixtures.sh`; `git status --ignored` → los 4 `.pdf` como `!!`. <br> - Estado actual: `.gitignore` sin la regla `tests/load/pdfs/*.pdf`; los 4 `.pdf` agregados al índice. <br> - `find … -type d -name stress` → sin resultados. |
 | **Etiqueta de taxonomía** | `[VERIFICADO-CÓDIGO]` |
-| **Impacto** | Las corridas son posibles en este equipo pero no reproducibles en un clon limpio ni auditables desde git; persiste el riesgo de que cada integrante use un conjunto distinto. |
+| **Impacto** | Resuelto: un clon limpio contiene el conjunto de carga completo. |
 | **Condiciones de descubrimiento** | Re-verificación del filesystem y de `git ls-files`/`git status --ignored` (2026-10-18). |
 | **Causa raíz asociada** | `RC-001` |
-| **Acción recomendada** | Documentar que los PDFs son locales y cómo obtenerlos (hecho el 2026-10-18 en `README.md` y `.gitignore`). El equipo debe confirmar si `tests/stress/pdfs` (enunciado) designa el mismo conjunto (`ASK-002`). |
-| **Estado** | Abierto (parcialmente mitigado). Decisión del equipo 2026-10-18: **no versionarlos**. |
-| **Restricciones / notas** | Se mantienen fuera de git por peso y por ser provistos por la cátedra. No se regeneran ni se sustituyen por fixtures artificiales. |
+| **Acción recomendada** | Hecho: `.gitignore` actualizado y PDFs versionados. Queda por resolver la calidad del dato (`FIND-011`: uno de los PDFs está duplicado) y confirmar si `tests/stress/pdfs` (enunciado) designa el mismo conjunto (`ASK-002`). |
+| **Estado** | **`[RESUELTO - IMPLEMENTADO]`** (2026-10-18): PDFs versionados en `tests/load/pdfs/`. |
+| **Restricciones / notas** | No se regeneran ni se sustituyen por fixtures artificiales. `FIND-011` sigue abierto (contenido duplicado). |
 
 ---
 
@@ -74,15 +74,14 @@ Se derivan de los hallazgos a medida que avanzan las etapas. Todavía sin asigna
 | **Categoría** | documentación / configuración |
 | **Severidad** | Media |
 | **Repositorio** | `pdf-extractext-infrastructure` |
-| **Ubicación** | `.gitignore:15-18` y `README.md` (sección de pruebas de carga) |
-| **Descripción** | El comentario del `.gitignore` decía que los PDFs "ya están copiados en el repositorio" mientras la línea siguiente los ignoraba (`tests/load/pdfs/*.pdf`); el README afirmaba que el conjunto oficial era "Sin `generate_fixtures.sh`", dando a entender que estaba versionado. **Resolución 2026-10-18:** ambos textos se reescribieron para declarar que los PDFs son **locales y no se versionan**, y que el registro de corridas (`docs/test-runs/`) también es local. |
-| **Evidencia** | - Estado previo: `.gitignore:15-18`, `README.md` (§Pruebas de carga). <br> - Estado actual: `.gitignore` ("NO se versionan… cada dev los copia localmente") y `README.md` (bullets "PDFs oficiales" y "Registro de corridas"). |
+| **Ubicación** | `.gitignore` (regla `tests/load/pdfs/*.pdf`, ya eliminada) y `README.md` (sección de pruebas de carga) |
+| **Descripción** | El comentario del `.gitignore` decía que los PDFs "ya están copiados en el repositorio" mientras la línea siguiente los ignoraba (`tests/load/pdfs/*.pdf`); el README afirmaba que el conjunto oficial era "Sin `generate_fixtures.sh`", dando a entender que estaba versionado. **Resolución (2026-10-18, revisada):** se eliminó la regla de `.gitignore` y el README declara que los PDFs **sí se versionan**; el registro de corridas (`docs/test-runs/`) sigue siendo local. |
+| **Evidencia** | - Estado previo: `.gitignore` (regla `tests/load/pdfs/*.pdf`), `README.md` (§Pruebas de carga). <br> - Estado actual: `.gitignore` sin la regla; `README.md` ("PDFs oficiales … SÍ se versionan"). |
 | **Etiqueta de taxonomía** | `[VERIFICADO-CÓDIGO]` |
-| **Impacto** | Bajo tras la corrección: se elimina la falsa expectativa de que el entorno de carga está completo en un clon limpio. |
+| **Impacto** | Bajo tras la corrección: el clon limpio ya incluye el conjunto de carga. |
 | **Condiciones de descubrimiento** | Contraste entre textos documentales y el listado/trackeo real del directorio. |
 | **Causa raíz asociada** | `RC-001` |
-| **Acción recomendada** | Resuelto por decisión del equipo (2026-10-18): mantener los PDFs fuera de git y documentarlo. |
-| **Estado** | **`[RESUELTO - IMPLEMENTADO]`** (2026-10-18) |
+| **Acción recomendada** | Resuelto por decisión del equipo (2026-10-18): versionar los PDFs y documentarlo. |
 | **Restricciones / notas** | Contradicción registrada también como `CON-001`/`CON-002` en `audit-decisions.md`. |
 
 ---
@@ -97,16 +96,16 @@ Se derivan de los hallazgos a medida que avanzan las etapas. Todavía sin asigna
 | **Categoría** | rendimiento / configuración |
 | **Severidad** | **Alta** (la herramienta de ejecución no produce el perfil del TP) |
 | **Repositorio** | `pdf-extractext-infrastructure` |
-| **Ubicación** | `Makefile:57-58` → `tests/load/run_k6.sh:21` → `tests/load/spike_tests.js:8-12` (stages `target: 1`); `tests/load/k6-spike.js:30-38` (stages `target: 100`, perfil exacto del TP 10s/20s/10s) sin referencia desde ningún script o target |
-| **Descripción** | El README (`README.md:75, 81-83`) documenta `make load-k6` como "spike: 10s→100 VUs, 20s, 10s→0". En la implementación real, `run_k6.sh` ejecuta `spike_tests.js`, cuyas stages suben a **1 VU** (`{ duration: '20s', target: 1 }`). El script que sí implementa el perfil del TP (100 VUs, con métricas p50/p90/p95 e `insecureSkipTLSVerify`) es `k6-spike.js`, y no está cableado a ningún target del Makefile ni invocado por `run_k6.sh`. Adicionalmente, `spike_tests.js` depende de los 4 PDFs oficiales ausentes (`FIND-001`). |
-| **Evidencia** | - `Makefile:57-58`: `load-k6: check` → `bash tests/load/run_k6.sh`. <br> - `run_k6.sh:21`: `k6 run --summary-export=… ${K6_ARGS:-} tests/load/spike_tests.js`. <br> - `spike_tests.js:9-11`: stages `target: 1`. <br> - `k6-spike.js:32-36`: stages `target: 100`, duración total 40s (coincide con la referencia 1.037 reqs en 40s). <br> - Grep: `k6-spike.js` no aparece en `Makefile`, `run_k6.sh` ni README. |
+| **Ubicación** | `Makefile:57-58` → `tests/load/run_k6.sh:21` → `tests/load/spike_tests.js:8-12` (stages `target: 1`); el script de 100 VUs (`k6-spike.js`) fue **eliminado el 2026-10-18** sin haber estado referenciado nunca |
+| **Descripción** | El README (`README.md:75, 81-83`) documenta `make load-k6` como "spike: 10s→100 VUs, 20s, 10s→0". En la implementación real, `run_k6.sh` ejecuta `spike_tests.js`, cuyas stages suben a **1 VU** (`{ duration: '20s', target: 1 }`). **Decisión del equipo (2026-10-18):** `spike_tests.js` es el script canónico y `k6-spike.js` (perfil de 100 VUs con fixtures generados) fue **eliminado**; el perfil de 100 VUs se implementará en `spike_tests.js` al final del ciclo (junto con el rate de Vegeta), cuando se corrijan los perfiles de carga. Queda abierto hasta entonces. |
+| **Evidencia** | - `Makefile:57-58`: `load-k6: check` → `bash tests/load/run_k6.sh`. <br> - `run_k6.sh:21`: `k6 run --summary-export=… ${K6_ARGS:-} tests/load/spike_tests.js`. <br> - `spike_tests.js:9-11`: stages `target: 1`. <br> - `k6-spike.js` eliminado del repo el 2026-10-18 (git history conserva su perfil). <br> - Grep: `k6-spike.js` no aparece en `Makefile`, `run_k6.sh` ni README. |
 | **Etiqueta de taxonomía** | `[VERIFICADO-CÓDIGO]` |
 | **Impacto** | Ejecutar el benchmark tal como está cableado NO reproduce el escenario del TP (100 VUs); las métricas resultantes no serían comparables con la referencia (P50 1,88s, P90 7,83s, 25,35 req/s). |
 | **Condiciones de descubrimiento** | Lectura cruzada Makefile → run_k6.sh → scripts k6, contrastando con el perfil del enunciado. |
 | **Causa raíz asociada** | `RC-003` |
-| **Acción recomendada** | El equipo debe definir cuál script es el canónico del TP (`ASK-003`). La auditoría no modifica scripts. |
-| **Estado** | Abierto |
-| **Restricciones / notas** | `k6-spike.js` usa fixtures generados (`fixture-1p/3p/8p/20p.pdf`) mientras `spike_tests.js` usa los 4 PDFs oficiales: son dos enfoques distintos de fixture, otro motivo para definir el canónico. |
+| **Acción recomendada** | Resuelta la elección del canónico (`ASK-003`): implementar las stages 100 VUs en `spike_tests.js` al corregir los perfiles de carga. |
+| **Estado** | Abierto (perfil pendiente; `k6-spike.js` eliminado 2026-10-18) |
+| **Restricciones / notas** | Corrección de perfiles pospuesta por el equipo hasta la etapa final de benchmarks. |
 
 ---
 
@@ -116,20 +115,20 @@ Se derivan de los hallazgos a medida que avanzan las etapas. Todavía sin asigna
 |---|---|
 | **ID** | `FIND-004` |
 | **Título** | READMEs de API, Extraction y Persistence desactualizados respecto del código real |
-| **Etapa de detección** | Etapa 1 |
+| **Etapa de detección** | Etapa 1 (resuelto 2026-10-18) |
 | **Categoría** | documentación |
 | **Severidad** | Media |
 | **Repositorio** | `pdf-extractext-api`, `pdf-extractext-extractor`, `pdf-extractext-persistence` |
 | **Ubicación** | Ver evidencia por servicio |
-| **Descripción** | Los tres README describen un estado "bootstrap" que el código ya superó: <br> **(a) API** `README.md:78-86, 134-150`: dice que `PERSISTENCE_URL` es "requisito muerto… ningún código la consume" (issue #6), que `/extract` "no registrado aún" y que no hay endpoints CRUD; el código real registra `POST /extract`, `POST /upload-pdf` y CRUD `/documents` con `persistence_client.go` (`cmd/api/main.go:32-40`). <br> **(b) Extraction** `README.md:3, 36-37`: dice "bootstrap inicial… fase actual: recepción" y que la respuesta es `{filename, size}`; el código real extrae texto con PyMuPDF y responde `content`, `page_count`, `checksum` (`extraction.py:10-15`, `domain/extractor.py`). <br> **(c) Persistence** `README.md:5`: dice "El CRUD y el repositorio se implementarán en etapas posteriores"; `router.go:26-30` registra CRUD completo (`POST/GET/PATCH/DELETE /documents`). |
-| **Evidencia** | Códigos citados arriba leídos directamente. |
+| **Descripción** | Los tres README describían un estado "bootstrap" que el código ya había superado: <br> **(a) API**: decía que `PERSISTENCE_URL` era "requisito muerto… ningún código la consume" (issue #6), que `/extract` estaba "no registrado aún" y que no había endpoints CRUD. <br> **(b) Extraction**: decía "bootstrap inicial… fase actual: recepción" y que la respuesta era `{filename, size}`. <br> **(c) Persistence**: decía "El CRUD y el repositorio se implementarán en etapas posteriores". **Resolución (2026-10-18):** los tres README se reescribieron/actualizaron al estado real (endpoints, contratos, variables de entorno y estructura). También se corrigió el comentario obsoleto de `pdf-extractext-api/.env.example` (`PERSISTENCE_URL` "aún sin consumo"). |
+| **Evidencia** | - API: `cmd/api/main.go:36-40` registra `/extract`, `/upload-pdf` y `/documents`; `internal/services/persistence_client.go` consume `PERSISTENCE_URL`. <br> - Extractor: `extraction.py` devuelve `{filename, extracted_text, checksum, content, page_count}`; `main.py` expone `/health` y `/readyz`. <br> - Persistence: `internal/api/router.go:26-37` registra CRUD + probes. <br> - READMEs actualizados en los tres repos. |
 | **Etiqueta de taxonomía** | `[VERIFICADO-CÓDIGO]` |
-| **Impacto** | Riesgo de decisiones de auditoría basadas en documentación vieja; enmascara funcionalidad ya implementada (p. ej. la orquestación API→Persistence). |
-| **Condiciones de descubrimiento** | Comparación de README vs `main.go`, `router.go` y `extraction.py` durante el inventario tecnológico. |
+| **Impacto** | Bajo tras la corrección: la documentación refleja el contrato real. |
+| **Condiciones de descubrimiento** | Comparación de READMEs vs `main.go`, `router.go` y `extraction.py`. |
 | **Causa raíz asociada** | `RC-002` |
-| **Acción recomendada** | Actualizar READMEs en sus repos (fuera del alcance de la auditoría). |
-| **Estado** | Abierto |
-| **Restricciones / notas** | — |
+| **Acción recomendada** | Hecho (2026-10-18). Queda pendiente ampliar `pdf-extractext-api/docs/openapi.yaml` (hoy solo documenta `/` y `/upload-pdf`). |
+| **Estado** | **`[RESUELTO - IMPLEMENTADO]`** (2026-10-18): READMEs de API, Extraction y Persistence actualizados. |
+| **Restricciones / notas** | Cambios de solo documentación; no se tocó comportamiento. |
 
 ---
 

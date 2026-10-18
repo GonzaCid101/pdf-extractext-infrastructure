@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
-# record-run.sh — registra una corrida de carga (k6/Vegeta) extrayendo la
-# configuración real del stack activo (Issue #1 / ADR D11).
-#
-# Los datos del entorno se extraen con docker compose ps / docker inspect.
-# Los parámetros y resultados de la corrida se pasan como flags CLI.
-#
+# record-run.sh — registra una corrida de carga (k6/Vegeta) con la config real del stack activo.
+# El entorno se extrae con docker compose ps / inspect; los resultados se pasan como flags CLI.
 # Uso: ver ./scripts/record-run.sh --help
 
 set -euo pipefail
@@ -65,7 +61,7 @@ COMPOSE="docker compose"
 
 # --- Extracción del entorno ---
 
-# ids de contenedores activos de un servicio (rápido, por proyecto/label oneoff=false)
+# ids de contenedores running de un servicio
 service_ids() { $COMPOSE ps -q --status running "$1" 2>/dev/null || true; }
 
 # primer id del servicio; vacío si el servicio no está levantado

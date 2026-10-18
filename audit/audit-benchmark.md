@@ -15,9 +15,9 @@ Inspección de solo lectura: `find`, `ls`, `wc`, `sha256sum` (2026-10-17).
 
 **Total de PDFs en el workspace (2026-10-18): 5** = `heavy.292.pdf` (extractor) + los 4 PDFs oficiales en `tests/load/pdfs/` (ver §1.2). Nota: `Essential-Kanban-Condensed-Spanish.pdf` es una copia exacta de `heavy.292.pdf`. `[VERIFICADO-CÓDIGO]`
 
-### 1.2 PDFs oficiales del TP — presentes localmente, NO versionados
+### 1.2 PDFs oficiales del TP — presentes y versionados
 
-Re-verificado el 2026-10-18: los 4 PDFs que esperan `run_vegeta.sh:34-43` y `spike_tests.js:17-22` **están presentes** en `pdf-extractext-infrastructure/tests/load/pdfs/`, pero `.gitignore:18` los excluye (no se versionan). Decisión del equipo (2026-10-18): mantenerlos fuera de git.
+Re-verificado el 2026-10-18: los 4 PDFs que esperan `run_vegeta.sh:34-43` y `spike_tests.js:17-22` están presentes en `pdf-extractext-infrastructure/tests/load/pdfs/` y **se versionan** en el repo (se eliminó la regla `tests/load/pdfs/*.pdf` de `.gitignore`).
 
 | # | Nombre | Tamaño (bytes) | SHA-256 |
 |---|---|---|---|
@@ -27,22 +27,17 @@ Re-verificado el 2026-10-18: los 4 PDFs que esperan `run_vegeta.sh:34-43` y `spi
 | 4 | `scrum_manager_historias_usuario.pdf` | 3.830.899 | `30efd6fcd0c022665676edcf164feb28e6b43dcce53ab9738550b99d70f5fd84` |
 
 - **Hallazgo (`FIND-011`):** el archivo `Essential-Kanban-Condensed-Spanish.pdf` es **byte a byte idéntico** a `pdf-extractext-extractor/tests/data/heavy.292.pdf` (mismo SHA-256 y tamaño). Es decir, el conjunto de 4 PDFs contiene un duplicado de un PDF de 8,9 MB / 292 páginas etiquetado como el documento Kanban, no el documento oficial. Esto afecta la validez del benchmark (rota 4 targets pero dos son el mismo archivo, y uno es desproporcionadamente pesado).
-- Ubicación: `pdf-extractext-infrastructure/tests/load/pdfs/`.
-- Motivo de no versionado: excluidos por `.gitignore:18`; ver `FIND-001`/`FIND-002`.
+- Ubicación: `pdf-extractext-infrastructure/tests/load/pdfs/` (versionados).
 - La ruta del enunciado `tests/stress/pdfs` **no existe** en ningún repo (`FIND-001`, `ASK-002`).
 
-### 1.3 Fixtures generables (no versionados, regenerables)
+### 1.3 Fixtures generables (eliminados 2026-10-18)
 
-Generados por `pdf-extractext-infrastructure/tests/load/pdfs/generate_fixtures.sh` (determinísticos, se crean on-the-fly con `make load-k6`/`make load-vegeta` o ejecutando el script). Consumidos por `k6-spike.js:22`:
+Los fixtures `fixture-1p/3p/8p/20p.pdf` se generaban con
+`tests/load/pdfs/generate_fixtures.sh` y los consumía `k6-spike.js:22`. Ambos
+archivos **fueron eliminados** (suite canónica = los 4 PDFs oficiales
+versionados): `FIND-003` / `ASK-003`.
 
-| Nombre | Páginas | Estado en disco |
-|---|---|---|
-| `fixture-1p.pdf` | 1 | AUSENTE (regenerable) |
-| `fixture-3p.pdf` | 3 | AUSENTE (regenerable) |
-| `fixture-8p.pdf` | 8 | AUSENTE (regenerable) |
-| `fixture-20p.pdf` | 20 | AUSENTE (regenerable) |
-
-`[VERIFICADO-CÓDIGO]` — el script existe y construye PDFs válidos con xref real; los `.pdf` resultantes no están en disco (tampoco serían versionados).
+`[VERIFICADO-CÓDIGO]` — no queda ningún artefacto que los genere ni los consume.
 
 ---
 
@@ -52,7 +47,7 @@ Generados por `pdf-extractext-infrastructure/tests/load/pdfs/generate_fixtures.s
 
 | Herramienta | Ruta | Perfil implementado | Target por defecto | Invocado por |
 |---|---|---|---|---|
-| k6 (spike 100 VUs) | `tests/load/k6-spike.js` | 10s→100 VUs, 20s a 100, 10s→0 (40s total); métricas p50/p90/p95; `insecureSkipTLSVerify`; rota 4 fixtures `fixture-*.pdf` | `https://pdf-extractext.localhost/extract` | **NINGUNO** (`FIND-003`) |
+| k6 (spike 100 VUs) | ~~`tests/load/k6-spike.js`~~ **eliminado 2026-10-18** | 10s→100 VUs, 20s a 100, 10s→0 (40s); rota fixtures `fixture-*.pdf` | — | nunca tuvo invocación (`FIND-003`) |
 | k6 (ejecutable) | `tests/load/spike_tests.js` | stages 10s→**1 VU**, 20s a 1, 10s→0; checkea 200 + `{content, page_count}`; rota los 4 PDFs oficiales | `https://pdf-extractext.localhost/extract` | `tests/load/run_k6.sh:21` ← `make load-k6` |
 | k6 runner | `tests/load/run_k6.sh` | Exporta resumen, calcula p50/p90/p95/throughput/éxito y registra vía `record-run.sh` (o `RECORD=0`) | — | `Makefile:57-58` |
 | Vegeta | `tests/load/vegeta/run_vegeta.sh` | **Documenta** 50 req/s × 30s, timeout 30s, `-insecure`; cuerpos multipart precompilados; rota los 4 PDFs oficiales. **Implementación real: `RATE="1/s"`** (≈30 reqs en 30s, no 1.500) → `FIND-007` | `https://pdf-extractext.localhost/extract` | `Makefile:60-61` (`make load-vegeta`) |
@@ -77,7 +72,7 @@ Generados por `pdf-extractext-infrastructure/tests/load/pdfs/generate_fixtures.s
 
 ## 3. Referencia externa del TP (enunciado de la cátedra) — para contraste
 
-Estas cifras **provienen directamente del enunciado de la cátedra** (información externa a los repos). No fueron reproducidas ni verificadas en esta auditoría: `docs/test-runs/` del repo Infrastructure solo contiene `TEMPLATE.md` y no hay corridas registradas. Se registran aquí como línea base para contrastar cuando los PDFs oficiales estén disponibles (`ASK-001`) y se ejecuten las corridas en las Etapas 3/4.
+Estas cifras **provienen directamente del enunciado de la cátedra** (información externa a los repos) y no fueron reproducidas en esta auditoría: las 5 corridas de `docs/test-runs/` son locales (gitignoreadas) y usan perfiles aún no corregidos. Se registran como línea base para contrastar en las Etapas 3/4 (`ASK-004`).
 
 Etiqueta: `[DOCUMENTADO-NO-VERIFICADO]`
 
@@ -94,7 +89,7 @@ Etiqueta: `[DOCUMENTADO-NO-VERIFICADO]`
 | P95 | 8,80 s |
 | Máximo | 13,94 s |
 
-Coherencia estática observada: el perfil coincide exactamente con las stages de `k6-spike.js` (no con `spike_tests.js`, que usa 1 VU) → `FIND-003`.
+Coherencia estática observada: ningún script vigente implementa este perfil (`spike_tests.js` usa 1 VU; `k6-spike.js` fue eliminado el 2026-10-18) → `FIND-003`.
 
 ### 3.2 Vegeta — Carga abierta
 
@@ -116,7 +111,7 @@ Coherencia estática observada: `run_vegeta.sh` fija `DURATION=30s`, `TIMEOUT=30
 |---|---|---|
 | Stack Docker con Traefik + TLS | Por verificar en runtime | Requiere `make certs` (mkcert) y `make up`; certs no generados en este entorno de auditoría |
 | `k6`, `vegeta`, `jq` instalados en el host | No verificado | Los scripts hacen `command -v` con fail-fast |
-| 4 PDFs oficiales en `tests/load/pdfs/` | **Presentes localmente, no versionados** | `FIND-001`; uno de ellos (`Essential-Kanban…`) es un duplicado de `heavy.292.pdf` → `FIND-011` |
+| 4 PDFs oficiales en `tests/load/pdfs/` | **Presentes y versionados** | `FIND-001`; uno de ellos (`Essential-Kanban…`) es un duplicado de `heavy.292.pdf` → `FIND-011` |
 | `pdf-extractext.localhost` resuelve a 127.0.0.1 | No verificado | README requiere ajuste manual en WSL/glibc |
 | Suite de registro (`record-run.sh`) | Presente | `scripts/record-run.sh`; `docs/test-runs/` con `TEMPLATE.md` versionado + 5 corridas locales (gitignoreadas) |
 | Réplicas de Extraction configurables 1–5 | Verificado (código) | `Makefile:check` valida el rango antes de `make up` |

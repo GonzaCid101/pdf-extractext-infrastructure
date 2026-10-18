@@ -76,26 +76,26 @@ make load-k6       # spike: 10s→100 VUs, 20s, 10s→0
 make load-vegeta   # 50 req/s × 30s, timeout 30s
 ```
 
-Ambas registran automáticamente en `docs/test-runs/`.
+Ambas registran la corrida en `docs/test-runs/`.
 
 - **k6** (`tests/load/spike_tests.js`): PDF oficial al azar por
   `multipart/form-data` (campo `file`). Éxito: HTTP 200 con
   `{content, page_count}`.
 - **Vegeta** (`tests/load/vegeta/run_vegeta.sh`): pre-compila cuerpos
   multipart de los 4 PDFs oficiales y lanza un único ataque a 50 req/s.
-- **PDFs oficiales** (`tests/load/pdfs/`): los 4 del profesor. **No se
-  versionan** (`.gitignore` los excluye por peso y provisión de cátedra):
-  cada dev debe copiarlos localmente. Sin `generate_fixtures.sh`.
+- **PDFs oficiales** (`tests/load/pdfs/`): los 4 del profesor, versionados
+  para que un clon limpio corra las pruebas sin pasos manuales. ⚠️
+  `Essential-Kanban-Condensed-Spanish.pdf` es idéntico a `heavy.292.pdf` del
+  extractor (`FIND-011` en `audit/audit-findings.md`).
 - **Registro de corridas** (`docs/test-runs/`): los `.md` que generan
-  `run_k6.sh`/`run_vegeta.sh` son **locales** (`.gitignore` los excluye);
-  solo `TEMPLATE.md` se versiona.
+  `run_k6.sh`/`run_vegeta.sh` son locales (`.gitignore`); solo `TEMPLATE.md`
+  se versiona.
 - **RECORD=0**: ensayo sin registrar (p. ej. contra `tests/load/mock_api.py`).
 
-> **Nota (perfiles en corrección):** los perfiles que ejecutan hoy los
-> scripts no coinciden con el objetivo del TP: `spike_tests.js` sube a 1 VU
-> (no 100) y `run_vegeta.sh` usa `RATE=1/s` (no 50 req/s). Ver
-> `audit/audit-findings.md` (`FIND-003`, `FIND-007`). Hasta corregirlos, las
-> corridas registradas no son comparables con la referencia de la cátedra.
+> **Nota (perfiles en corrección):** hoy `spike_tests.js` sube a 1 VU (no
+> 100) y `run_vegeta.sh` usa `RATE=1/s` (no 50 req/s): hasta corregirlos
+> (`FIND-003`, `FIND-007` en `audit/audit-findings.md`) las corridas no son
+> comparables con la referencia de la cátedra.
 
 ## Reglas del bootstrap
 

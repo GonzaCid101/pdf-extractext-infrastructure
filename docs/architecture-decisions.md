@@ -24,13 +24,12 @@ repos de los servicios.
 ### D3. Routing interno: API → Extraction vía Traefik, entrypoint `internal` (`:8090`) sin redirect
 - **Decisión:** el router de `extraction` vive en un entrypoint `internal`
   (`:8090`) **sin** redirect a HTTPS y **no publicado** al host; solo los
-  routers públicos (API, cuando exista) redirigen :80 → :443.
-- **Contexto:** desviación mínima del patrón docente — el repo docente no
-  tiene servicios que se llamen entre sí; nosotros sí. Las llamadas internas
-  HTTP+Host-header no deben recibir un 301.
+  routers públicos redirigen :80 → :443.
+- **Contexto:** el repo docente no tiene servicios que se llamen entre sí;
+  nosotros sí, y las llamadas internas HTTP+Host-header no deben recibir un 301.
 - **Balanceo:** Traefik balancea entre réplicas de Extraction (labels docker
-  + `deploy.replicas`). API consumirá `EXTRACTION_URL=http://traefik:8090` con
-  `Host: extraction.pdf-extractext.localhost` (ver issues de coordinación).
+  + `deploy.replicas`); API consume `EXTRACTION_URL=http://traefik:8090` con
+  `Host: extraction.pdf-extractext.localhost`.
 
 ### D4. Aislamiento por redes
 - `services`: Traefik, API, Extraction, Persistence.
@@ -48,33 +47,27 @@ repos de los servicios.
 ### D7. MongoDB `mongo:8` (RESUELTA, antes pendiente #6)
 - `MONGO_IMAGE=mongo:8` es la versión definitiva.
 - Coordinación **resuelta:** los tests de integración de Persistence usan
-  `mongo:8` por defecto (helper `mongoImage()` en
-  `internal/infra/mongo/client_integration_test.go`, sobreescribible con
-  `MONGO_TEST_IMAGE`); el README del repo quedó alineado a `mongo:8`.
+  `mongo:8` por defecto (helper `mongoImage()`, sobreescribible con
+  `MONGO_TEST_IMAGE`) y su README quedó alineado.
 
 ### D8. Healthchecks (mecanismo real, sin `curl` en contenedores)
-- `depends_on: service_healthy` donde existe healthcheck; el arranque ordenado
-  es: `mongodb` healthy → `persistence` healthy → `extraction` healthy →
-  `api` (que además espera a `persistence` y a `traefik` en `started`).
-- **Decisión (actualizada):** los healthchecks se implementan in-container con
-  las herramientas nativas de cada runtime, **sin instalar `curl`**:
-  - `api` (Go, imagen distroless sin shell): `["CMD", "/healthprobe"]`
-    (binario estático propio; el `healthprobe` consulta el endpoint local).
-  - `persistence` (Go, imagen distroless `nonroot`): `["CMD", "/healthprobe"]`
-    (el `healthprobe` consulta `http://127.0.0.1:<PUERTO>/health/ready`,
-    que verifica la dependencia crítica: Mongo).
+- `depends_on: service_healthy` donde existe healthcheck; arranque ordenado:
+  `mongodb` healthy → `persistence` healthy → `extraction` healthy → `api`
+  (que además espera a `persistence` y `traefik` en `started`).
+- **Decisión:** healthchecks in-container con las herramientas nativas de cada
+  runtime, **sin instalar `curl`**:
+  - `api` y `persistence` (Go, imagen distroless sin shell): `["CMD",
+    "/healthprobe"]` (binario estático propio; persistence consulta
+    `/health/ready`, que verifica Mongo).
   - `extraction` (Python): `["CMD", "python3", "-c", "import urllib.request;
     urllib.request.urlopen('http://127.0.0.1:8001/readyz', timeout=3)"]`
-    (biblioteca estándar de Python, ya presente en la imagen).
+    (librería estándar ya presente en la imagen).
   - `mongodb`: `mongosh --quiet … db.adminCommand('ping')`.
-- **Contexto:** los servicios exponen probes (`/readyz`, `/health/ready`);
-  Traefik excluye automáticamente del balanceo a las réplicas unhealthy.
-- **Justificación técnica:** las imágenes `distroless` no traen shell ni
-  `curl`; añadir `curl` engorda la imagen y amplía la superficie de ataque.
-  Usar el binario compilado (Go) y la librería estándar (Python) es más
-  liviano, sin dependencias nuevas y con paridad entre build y runtime.
+- **Justificación:** las imágenes `distroless` no traen shell ni `curl`;
+  añadirlo engorda la imagen y amplía la superficie de ataque. Traefik excluye
+  del balanceo a las réplicas unhealthy.
 - **Descartado:** `CMD-SHELL` con `curl -f http://localhost:<PUERTO>/readyz`
-  (requería instalar `curl`/shell y unificar el endpoint de probe).
+  (requería instalar `curl`/shell).
 
 ### D9. Límites de recursos
 - Todos los servicios tienen límite explícito de CPU y memoria por
@@ -92,9 +85,9 @@ repos de los servicios.
   figura en el catálogo contractual. Infra no participa.
 
 ### D11. Herramienta de carga: k6 + Vegeta
-- Decidido por el TP del equipo: k6 abierto ≥25 req/s, spike 100 VUs;
-  Vegeta 50 req/s x 30s.
-- Entorno de carga (fixtures, targets Make) se define en una issue aparte.
+- Perfil del TP: k6 abierto ≥25 req/s, spike 100 VUs; Vegeta 50 req/s x 30s.
+- Suite en `tests/load/` (k6 + Vegeta contra el dominio público, 4 PDFs
+  oficiales versionados, registro de corridas en `docs/test-runs/`).
 
 ### D12. Sin CI por ahora
 - `make smoke` corre solo local. CI se evalúa en issue aparte.
@@ -110,10 +103,9 @@ repos de los servicios.
   descarta binario directo / `application/octet-stream`).
 - Salida 200: `{"content": "...", "page_count": N}`.
 - API (Bruno) ya lo implementa; Extraction (Manu) ajusta sus issues #2 y #5.
-- **Pregunta abierta del equipo:** quién calcula el SHA-256 que Persistence
-  necesita para `POST /documents` (índice único `checksum_1`). Propuesta:
-  Extraction lo sigue calculando (campo extra en la respuesta) o lo calcula
-  API. A resolver en sync del equipo.
+- **SHA-256 (resuelto):** lo calcula Extraction y lo devuelve como campo
+  extra; la API lo reenvía a Persistence en `POST /documents` (índice único
+  `checksum_1`).
 
 ### D15. API Service en el compose (✅ RESUELTA)
 - El servicio `api` se construye desde `API_CONTEXT` (repo hermano) con tag
@@ -122,8 +114,5 @@ repos de los servicios.
 - Env inyectadas: `EXTRACTION_URL=http://traefik:8090` (entrypoint interno,
   ver D3), `PERSISTENCE_URL=http://persistence:8002`, `MAX_FILE_SIZE_MB=50`.
 - Router público `Host(pdf-extractext.localhost)` en entrypoint `https` con
-  TLS (mkcert). La redirección :80→:443 ya es global en la config estática,
-  por lo que no se define un router HTTP redundante.
-- **Restricción contractual:** Extraction acepta **solo** `multipart/form-data`
-  (no `application/octet-stream` ni binario directo). La API reenvía el
-  archivo en ese formato (ver D14).
+  TLS (mkcert); la redirección :80→:443 es global en la config estática, por lo
+  que no se define un router HTTP redundante.

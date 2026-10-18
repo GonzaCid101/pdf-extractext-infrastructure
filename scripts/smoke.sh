@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Smoke tests del bootstrap: servicios arriba, flujo funcional E2E de
-# POST /extract, aislamiento por redes, persistencia del volumen e
-# higiene del repo.
+# Smoke tests: servicios arriba, E2E de POST /extract, aislamiento por redes,
+# persistencia del volumen e higiene del repo.
 set -euo pipefail
 export COMPOSE_PROGRESS=plain
 cd "$(dirname "$0")/.."
@@ -103,9 +102,7 @@ fi
 
 # --- Smoke funcional E2E de POST /extract (dominio público) ---
 
-# Fixture PDF mínimo (1 página, con texto) generado al vuelo: offsets y
-# tabla xref reales para que cualquier parser lo acepte. Vive en un tmpdir
-# que se limpia al salir; no deja archivos versionables en el repo.
+# Fixture PDF de 1 página generado al vuelo (xref real); vive en un tmpdir limpiado al salir.
 fixture_pdf() { # salida
   local out=$1 i xref
   local stream='BT /F1 12 Tf 72 720 Td (pdf-extractext smoke test) Tj ET'
@@ -130,8 +127,7 @@ fixture_pdf() { # salida
   printf 'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n' "$xref" >> "$out"
 }
 
-# Ventana de arranque de la API: el smoke E2E no debe fallar por flakiness
-# de boot. No es una aserción: quien falla son los checks 9 y 10.
+# Espera el boot de la API (no es un check: los checks 9 y 10 son los que fallan).
 wait_api_200() { # url
   local c
   for _ in $(seq 1 30); do
@@ -148,10 +144,7 @@ FIXTURE="$SMOKE_TMP/fixture.pdf"
 fixture_pdf "$FIXTURE"
 wait_api_200 https://pdf-extractext.localhost/ || true
 
-# 9) Flujo feliz: POST /extract vía https://pdf-extractext.localhost con el
-#    PDF de prueba en el campo multipart "file". Contrato del TP: HTTP 200 y
-#    JSON con las claves content y page_count.
-#    (`|| true`: curl ya escribe 000 con -w si falla; evita duplicarlo.)
+# 9) Flujo feliz: POST /extract con el PDF en el campo "file"; contrato TP: 200 + {content, page_count} (|| true: curl ya escribe 000 con -w)
 code=$(curl -sk -o "$SMOKE_TMP/extract-ok.json" -w '%{http_code}' --max-time 30 \
   -F "file=@${FIXTURE}" https://pdf-extractext.localhost/extract || true)
 : "${code:=000}"
@@ -161,8 +154,7 @@ else
   fail "9. POST /extract con PDF: HTTP $code (esperaba 200 con content y page_count), cuerpo: $(head -c 300 "$SMOKE_TMP/extract-ok.json" 2>/dev/null || echo '<vacío>')"
 fi
 
-# 10) Flujo inválido: mismo POST con el campo con nombre incorrecto (sin
-#     "file"). La API debe rechazar con exactamente 400 sin tocar Extraction.
+# 10) POST sin campo "file": la API debe rechazar con exactamente 400 sin tocar Extraction.
 code=$(curl -sk -o "$SMOKE_TMP/extract-err.json" -w '%{http_code}' --max-time 30 \
   -F "otro-campo=@${FIXTURE}" https://pdf-extractext.localhost/extract || true)
 : "${code:=000}"
@@ -187,9 +179,7 @@ indexes=$(docker exec pdf-extractext-mongodb-1 mongosh --quiet \
 [ "$indexes" = "1" ] && ok "12. índice único checksum_1 creado por Persistence" \
                       || fail "12. índice checksum_1 no encontrado o no único (match: $indexes)"
 
-# 13) down && up conserva los datos de Mongo (volumen nombrado).
-#    Inserta/limpia un doc temporal directo en Mongo (prueba de infra:
-#    no depende del CRUD de Persistence).
+# 13) down && up conserva los datos (inserta/limpia un doc temporal directo en Mongo, sin CRUD).
 MARKER="smoke-$(date +%s)"
 MONGO() { docker exec pdf-extractext-mongodb-1 mongosh --quiet \
   -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" \

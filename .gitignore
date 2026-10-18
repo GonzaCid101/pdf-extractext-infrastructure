@@ -8,15 +8,12 @@ mongodata/
 # Caches / SO
 .DS_Store
 *.log
+__pycache__/
 
 # Certificados TLS locales (mkcert) — cada dev genera los suyos, nunca versionar
 traefik/certs/
 
-# PDFs oficiales del conjunto de prueba (tests/load/pdfs/): NO se versionan
-# (los provee la cátedra y pesan demasiado). Cada dev los copia localmente;
-# no se regeneran con generate_fixtures.sh ni se sustituyen por fixtures
-# artificiales.
-tests/load/pdfs/*.pdf
+# PDFs oficiales (tests/load/pdfs/): versionados, no ignorar (un clon limpio debe correr las pruebas).
 
 # Artefactos transitorios de pruebas de carga (no versionar)
 tests/load/.k6-summary.json
@@ -24,6 +21,5 @@ tests/load/.vegeta-results.bin
 tests/load/.vegeta-report.json
 tests/load/vegeta/bodies/
 
-# Resultados generados de pruebas de carga: locales, no se versionan.
-# TEMPLATE.md sigue versionado (git no ignora archivos ya trackeados).
+# Corridas de carga: locales; solo TEMPLATE.md se versiona.
 docs/test-runs/*

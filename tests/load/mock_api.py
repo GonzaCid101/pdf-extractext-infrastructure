@@ -1,8 +1,7 @@
-"""Mock del API para validar k6/vegeta sin stack.
+"""Mock del API para ensayar k6/Vegeta sin stack (RECORD=0).
 
-POST /extract: verifica el multipart del campo "file" por sha256 contra los
-4 PDFs oficiales. Responde 200 con {content, page_count} o 400.
-GET /: 200 (readiness).
+Valida multipart y sha256 de los 4 PDFs oficiales; responde 200 {content, page_count} o 400.
+GET / responde 200 (readiness).
 """
 import hashlib
 import json
