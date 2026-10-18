@@ -36,6 +36,7 @@ Se derivan de los hallazgos a medida que avanzan las etapas. Todavía sin asigna
 | `RC-004` | El informe técnico se redactó con datos de ejemplo/simulados en lugar de corridas reales y no se reemplazaron al obtener mediciones. | `FIND-008` | Propuesta | `[HIPÓTESIS]` |
 | `RC-005` | Los documentos de infraestructura (ADR, README, `.env.example`) evolucionaron sin una revisión de consistencia cruzada tras cada cambio de implementación. | `FIND-009`, `FIND-010` | Propuesta | `[HIPÓTESIS]` |
 | `RC-006` | El conjunto de PDFs de carga se armó copiando archivos sin verificar su procedencia/hash, dejando un duplicado del PDF pesado del extractor. | `FIND-011` | Propuesta | `[HIPÓTESIS]` |
+| `RC-007` | El cliente HTTP del API colapsa cualquier status de upstream en un error genérico, sin distinguir saturación (503) de fallo real. | `FIND-012` | Propuesta | `[HIPÓTESIS]` |
 
 ---
 
@@ -203,9 +204,9 @@ Los 7 tests nuevos de `TestMarkdownConversion` verifican: encabezado por tamaño
 | **Impacto** | Cualquier corrida con el script actual NO es comparable con la referencia del TP (998 exitosas / 16,65 req/s efectivo / 501 timeouts en 1.500 reqs): con 1 req/s el sistema quedaría subcargado y los latencies/timeouts serían artificialmente bajos. |
 | **Condiciones de descubrimiento** | Contraste entre el comentario/README/ADR (50 req/s) y el valor efectivo de `RATE` durante la lectura completa del script para el inventario de benchmarks. |
 | **Causa raíz asociada** | `RC-003` |
-| **Acción recomendada** | El equipo debe confirmar el rate intencional (`ASK-008`). La auditoría NO modifica scripts. |
-| **Estado** | Abierto |
-| **Restricciones / notas** | No se ejecutó el script (restricción de no correr cargas); el análisis es 100% estático del código. |
+| **Acción recomendada** | **Decisión del equipo (2026-10-18):** el rate se corrige a `50/s` en la etapa final de benchmarks (`make load-vegeta` hoy corre a 1 req/s). |
+| **Estado** | Abierto (corrección diferida) |
+| **Restricciones / notas** | Prioridad del equipo: primero el funcionamiento correcto del sistema; las pruebas de carga (k6/Vegeta) quedan para el final junto con `FIND-003`. |
 
 ---
 
@@ -351,3 +352,26 @@ Nota: los tests de integración **no se ejecutaron** (requieren Docker/testconta
 | **Acción recomendada** | El equipo debe reemplazar `Essential-Kanban-Condensed-Spanish.pdf` por el documento oficial real y verificar los hashes de los 4 archivos (`ASK-009`). |
 | **Estado** | Abierto |
 | **Restricciones / notas** | No se modificaron datos de prueba; solo se documentó el hallazgo. |
+
+---
+
+### FIND-012
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-012` |
+| **Título** | El backpressure de Extraction (503 + `Retry-After`) llega al cliente como 502 genérico, sin header |
+| **Etapa de detección** | Verificación funcional 2026-10-18 |
+| **Categoría** | contrato / configuración |
+| **Severidad** | **Media** (funciona, pero el cliente no puede distinguir saturación de fallo real) |
+| **Repositorio** | `pdf-extractext-api` (exige coordinación con Extraction) |
+| **Ubicación** | `internal/services/extraction_client.go:72-73` (cualquier status ≠ 200 → error genérico) · `internal/api/extract.go:47` y `internal/api/upload_pdf.go:65,73` (→ 502) |
+| **Descripción** | Extraction, al superar `MAX_CONCURRENCY`, responde **503 + `Retry-After`** (patrón fail-fast, ADR D10). El cliente del API descarta el status y el header del upstream y los handlers responden **502** genérico: el cliente final nunca ve el backpressure controlado que exige la consigna (503/429 con espera informada). Además, `/upload-pdf` tiene timeout de 30 s, por lo que bajo saturación el cliente percibe 502 en lugar de un rechazo inmediato. |
+| **Evidencia** | - Directo contra Extraction (12 `curl` paralelos a `http://extraction:8001/extract` desde la red `services`): respuestas **503** con header `Retry-After`. <br> - Vía dominio público (14 `curl` paralelos a `https://pdf-extractext.localhost/extract`): **3×200 + 11×502**, y ningún header `Retry-After` en las respuestas. <br> - `extraction_client.go:72-73`: `if resp.StatusCode != http.StatusOK { return nil, … }` (no propaga ni el código ni el header). |
+| **Etiqueta de taxonomía** | `[VERIFICADO-PRUEBA]` |
+| **Impacto** | El cliente (y las herramientas de carga) trata saturación como fallo: reintenta en el momento y empeora la cola. Se pierde la señal de "esperá N segundos" que es el núcleo del manejo de congestión del TP. |
+| **Condiciones de descubrimiento** | Prueba de saturación manual con `curl` concurrente durante la verificación funcional del sistema (2026-10-18). |
+| **Causa raíz asociada** | `RC-007` |
+| **Acción recomendada** | Propagar el 503 y el header `Retry-After` del extractor en `/extract` y `/upload-pdf` (y documentarlos en el README/OpenAPI). Requiere decisión y cambio de comportamiento en el API. |
+| **Estado** | Abierto |
+| **Restricciones / notas** | **Prioridad del equipo:** primero el funcionamiento correcto del sistema; se corregirá al final. Las pruebas de carga (k6/Vegeta) y sus perfiles quedan para la etapa final (`FIND-003`, `FIND-007`). |

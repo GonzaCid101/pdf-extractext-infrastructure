@@ -129,7 +129,7 @@ Se llena a partir de la Etapa 2 (contratos inter-servicio verificados en código
 |---|---|---|
 | Cifras de benchmark reales (k6/Vegeta) | Re-verificación 2026-10-18: hay 5 corridas locales en `docs/test-runs/` (gitignoreadas), pero con perfiles aún no corregidos (`FIND-003`/`FIND-007`); no hay corridas válidas versionadas. | Corridas reales en Etapa 3/4 con los perfiles corregidos. |
 | Conjunto oficial de PDFs (`tests/stress/pdfs` o `tests/load/pdfs/*.pdf`) | Re-verificación 2026-10-18: los 4 PDFs están presentes en `tests/load/pdfs/` y **se versionan**. `tests/stress/pdfs` sigue sin existir. Uno de los 4 está duplicado (`FIND-011`). | `ASK-002` / `FIND-001`. |
-| Comportamiento en runtime (respuestas HTTP, latencias, saturación 503) | Etapa 1 es estática; no se ejecutaron servicios ni cargas (restricción 6). | Etapas 3A–4. |
+| Comportamiento en runtime (respuestas HTTP, latencias, saturación 503) | Parcialmente superado (2026-10-18): verificación funcional manual + `make smoke` (15 checks) sobre el stack real; saturación 503 verificada directo contra Extraction → detectado `FIND-012`. Siguen pendientes las corridas de carga. | Corridas de carga en Etapa 3/4. |
 | Contenido de `.env` de Infrastructure | Presente en disco pero no releído por contención con secretos (aunque es un `.env` de desarrollo local, `.gitignore` lo excluye). | `ASK-007` si algún dato de entorno es crítico. |
 | Ejecución efectiva de los tests de integración de Persistence | Requieren Docker/testcontainers; en esta sesión solo se verificó su compilación (`go vet -tags=integration`). | Etapa 2/3 si se habilita Docker. |
 
@@ -180,5 +180,8 @@ Consolidación de la suite de carga y clean-code de documentación/comentarios e
 |---|---|---|---|---|---|
 | C-17 | `pdf-extractext-infrastructure` | `tests/load/k6-spike.js`, `tests/load/pdfs/generate_fixtures.sh`, `tests/load/test_carga.txt` | script/datos | Eliminados (sin consumidores): suite canónica = `spike_tests.js` + los 4 PDFs oficiales versionados; se retiran también sus referencias en `.gitignore`, README y `audit/` | `FIND-003` / `ASK-003` (resuelta) |
 | C-18 | los 4 repos | `README.md`, `docs/`, `Makefile`, `scripts/`, `tests/load/`, `.gitignore`, `.env.example` | doc | Clean-code: comentarios a una línea, sin sobreexplicaciones ni texto redundante | — |
+| C-19 | `pdf-extractext-infrastructure` | `audit/audit-findings.md`, `audit/audit-decisions.md`, `audit/audit-master.md` | doc | Registro del nuevo hallazgo `FIND-012` (el 503 + `Retry-After` de Extraction llega al cliente como 502 genérico), con `RC-007` y `CON-017`; corrección **diferida** por decisión del equipo | `FIND-012` / `CON-017` |
 
-**Estado de los hallazgos tras la limpieza (2026-10-18):** sin cambios (abiertos `FIND-003`, `FIND-007`, `FIND-011`; `ASK-003` resuelta).
+**Estado de los hallazgos tras la limpieza (2026-10-18):** sin cambios de implementación (abiertos `FIND-003`, `FIND-007`, `FIND-011`; `ASK-003` resuelta). Se agrega `FIND-012` (abierto, registrado sin corregir).
+
+**Prioridad declarada por el equipo (2026-10-18):** primero el funcionamiento correcto del sistema. Las pruebas de carga (perfiles de k6 y Vegeta, `FIND-003`/`FIND-007`) y las correcciones abiertas relacionadas con benchmarks (`FIND-011`, `FIND-012`) quedan para la etapa final.
