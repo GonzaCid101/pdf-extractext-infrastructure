@@ -24,7 +24,7 @@ Mapeo 1:1 con el ADR de Infrastructure. Estado = lo que la auditoría pudo confi
 | `DEC-11` | D11 | Herramientas de carga: k6 (spike 100 VUs, abierto ≥25 req/s) + Vegeta (50 req/s × 30s, timeout 30s) | Perfil de duración/timeout de Vegeta coincide (`DURATION=30s`, `TIMEOUT=30s`, `-insecure`), **pero el rate está en 1/s, no 50/s** → `FIND-007`; **k6 cableado a 1 VU** → `FIND-003` | `[VERIFICADO-CÓDIGO]` con gaps en ambas herramientas |
 | `DEC-12` | D12 | Sin CI por ahora; smoke local | Existe `.github/workflows/ci.yml` solo en `pdf-extractext-api` (repo propio); Infrastructure sin CI, `make smoke` local | `[VERIFICADO-CÓDIGO]` |
 | `DEC-13` | D13 | Stack fijo: Compose v2, Traefik v3, Mongo oficial, Make, Bash, curl; sin herramientas extra | Consistente con compose/Makefile/README | `[VERIFICADO-CÓDIGO]` |
-| `DEC-14` | D14 | Contrato Extraction: solo `multipart/form-data` (campo `file`) → `{content, page_count}` | API y extractor implementan multipart campo `file`; API responde exactamente `{content, page_count}`. Pregunta abierta del ADR sobre quién calcula el SHA-256 sigue sin resolverse en el código de orquestación (`upload_pdf.go` usa checksum del extractor) | `[VERIFICADO-CÓDIGO]` parcial / `[DECISIÓN-PENDIENTE]` (checksum) |
+| `DEC-14` | D14 | Contrato Extraction: solo `multipart/form-data` (campo `file`) → `{content, page_count}` | API y extractor implementan multipart campo `file`; API responde exactamente `{content, page_count}`. Pregunta abierta del ADR sobre quién calcula el SHA-256 sigue sin resolverse en el código de orquestación (`upload_pdf.go` usa checksum del extractor); además el extractor transporta el Markdown dos veces (`FIND-020`) | `[VERIFICADO-CÓDIGO]` parcial / `[DECISIÓN-PENDIENTE]` (checksum, `FIND-020`) |
 | `DEC-15` | D15 | API declarada en el compose (✅ resuelta) | Compose define servicio `api` con build `${API_CONTEXT}`, red `services`, env `EXTRACTION_URL`/`PERSISTENCE_URL`/`MAX_FILE_SIZE_MB=50`, router público TLS | `[VERIFICADO-CÓDIGO]` |
 
 Nota: el README de API (`README.md:26-27`) aún afirma que "esta API todavía no está declarada en ese compose" — contradicción con D15 y con el compose real → `CON-006`.
@@ -138,3 +138,20 @@ Nota: el README de API (`README.md:26-27`) aún afirma que "esta API todavía no
   - `pdf-extractext-persistence/README.md` → sección de API (CRUD + probes), estado y estructura reales.
 - **Pendiente relacionado:** ampliar `pdf-extractext-api/docs/openapi.yaml` (hoy solo `/` y `/upload-pdf`).
 - **Detalle:** `FIND-004`.
+
+---
+
+## Registro de Resoluciones — correcciones Etapa 3A (Bloque A + B1), 2026-10-19
+
+> Alcance aprobado: `FIND-016`…`FIND-019` (parcial), `FIND-021`, `FIND-022`. Sin benchmarks (solo `make test`), sin commits; `FIND-018` se resolvió con el code existente `INVALID_PDF_CONTENT` (sin cambios de contrato en API/OpenAPI).
+
+### R-07 — Correcciones del extractor (`FIND-016`, `FIND-017`, `FIND-018`, `FIND-019`, `FIND-021`, `FIND-022`)
+
+- **Decisión del equipo:** resolver los 6 hallazgos de la Etapa 3A; `FIND-020` (contrato duplicado) y los límites de memoria de `FIND-019` quedan pendientes de decisión.
+- **Archivos modificados (repo `pdf-extractext-extractor`):**
+  - `domain/extractor.py` → flags sin `TEXT_PRESERVE_IMAGES`; `needs_pass` → `InvalidPDFContentError` (422).
+  - `extraction.py` → `run_in_threadpool`; `await upload.close()` tras leer.
+  - `config.py` (setting `port` eliminada), `gunicorn.conf.py` y `docker-compose.yml` (workers default 1), `README.md` (puerto 8001, 1×1, PDF cifrado → 422).
+  - Tests: fixture `encrypted_pdf` en `tests/conftest.py`; `TestEncryptedPdf`, `TestImageBlocksAreSkipped`, `tests/api/test_extract.py::test_encrypted_pdf_maps_to_422`, `tests/api/test_concurrency.py` (2 tests de regresión); docstrings compactados (Clean Code).
+- **Verificación `[VERIFICADO-PRUEBA]`:** `make test` → **76 passed, 1 xfailed**; los 2 tests de concurrencia fallan si se revierte el `threadpool`.
+- **Detalle:** `audit-master.md` §8 (C-27…C-30); `audit-findings.md` (`FIND-016`…`FIND-022`).
