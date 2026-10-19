@@ -16,7 +16,7 @@ Carpeta autorizada: `pdf-extractext-infrastructure/audit/` (único lugar válido
 |---|---|---|---|
 | Etapa 1 | Relevamiento estructural y línea base | **COMPLETADA (2026-10-17); RE-VERIFICADA (2026-10-18)** | 4/4 repositorios inventariados. `FIND-001`…`FIND-007` definidos; `FIND-005` y `FIND-006` resueltos el 2026-10-17. Re-verificación 2026-10-18: se ajustaron `FIND-001`/`FIND-002`, se agregaron `FIND-008`…`FIND-011` y se alinearon los documentos de infraestructura (§8). |
 | Etapa 2 | Auditoría funcional end-to-end e integración | **COMPLETADA (2026-10-18)** | Flujo real trazado y verificado en runtime (§4); matriz `INT-XX` completa; nuevos `FIND-013`…`FIND-015`; `FIND-012` extendido al caso 422. Sin correcciones de código (solo diagnóstico). |
-| Etapa 3A | (definida por el equipo) | PENDIENTE | — |
+| Etapa 3A | Auditoría del microservicio de extracción (Área B) | **COMPLETADA (2026-10-19); CORRECCIONES APLICADAS (2026-10-19)** | `pdf-extractext-extractor` + interfaz con API inspeccionados en profundidad: algoritmo/Markdown, memoria, concurrencia/workers, errores y backpressure. Nuevos `FIND-016`…`FIND-022`, `RC-010`…`RC-015`, `HYP-07`…`HYP-09`. La auditoría fue solo inspección + sondas locales (ya eliminadas); la fase de correcciones aprobada (Bloque A + B1) resolvió `FIND-016`…`FIND-018`, `FIND-021`, `FIND-022` y parcialmente `FIND-019` (§8, C-27…C-30). |
 | Etapa 3B | (definida por el equipo) | PENDIENTE | — |
 | Etapa 3C | (definida por el equipo) | PENDIENTE | — |
 | Etapa 4 | (definida por el equipo) | PENDIENTE | — |
@@ -41,6 +41,7 @@ Notas adicionales:
 - **Contrato de respuesta de API:** `POST /extract` devuelve exactamente `{content, page_count}` (`internal/api/extract.go:52-56`) `[VERIFICADO-CÓDIGO]`.
 - **Extracción real:** PyMuPDF (`pymupdf.open` + `page.get_text("dict")`) con `page_count` del documento y **conversión a Markdown estructurado** (encabezados, listas, párrafos, separación de páginas) desde 2026-10-17 (`domain/extractor.py`) `[VERIFICADO-CÓDIGO]` + `[VERIFICADO-PRUEBA]` (§8).
 - **Estado de los README vs código:** eran los tres desactualizados respecto del código → `FIND-004`; **actualizados el 2026-10-18** (API, Extraction y Persistence).
+- **Modelo de concurrencia de Extraction (Etapa 3A y correcciones posteriores):** Gunicorn con workers Uvicorn (`Dockerfile:37` → `gunicorn.conf.py:5-8`) + `AdmissionMiddleware` con `asyncio.Semaphore` por proceso (`admission.py:33-58`, `MAX_CONCURRENCY`) + extracción delegada a `run_in_threadpool` desde 2026-10-19 (`extraction.py:93-94`). Los defaults de workers se alinearon a 1 (`FIND-021`); Infrastructure ya fijaba 1×1 (`docker-compose.yml:77-79`). `FIND-016` (coste del `get_text("dict")` con imágenes) y `FIND-017` (event loop bloqueado) detallan los dos cuellos de botella medidos y ya corregidos.
 
 ---
 
@@ -97,6 +98,7 @@ Se llena a partir de la Etapa 2 (contratos inter-servicio verificados en código
 - **CRUD `/documents`:** la API delega 1:1 en Persistence (validación de id y de longitud de filename en el upstream); id inexistente válido → 404, id malformado → 500 (`FIND-013` — corregido: hoy la API valida hex-24 y responde 400).
 - **Aislamiento confirmado en runtime:** redes (`docker network inspect`): `services` = traefik/api/extraction/persistence; `data` = mongodb + persistence; grep negativo confirma que Extraction no llama a ningún servicio y Persistence solo habla con Mongo.
 - **Timeouts en cascada:** Traefik sin tope de respuesta → API 30 s (`/extract` vía `http.Client`, `/upload-pdf` vía ctx) + 10 s hacia Persistence → Mongo defaults (30 s serverSelection). El 30 s igual al timeout de Vegeta: sin margen entre capas (referencia para Etapa 3/4).
+- **Observaciones de contrato de Extraction (Etapa 3A, corregidas el 2026-10-19 salvo indicación):** (a) un PDF cifrado con contraseña respondía 500 y hoy responde **422 `INVALID_PDF_CONTENT`** (`FIND-018`); (b) la respuesta de `/extract` transporta el Markdown dos veces (`extracted_text` == `content`) aunque la API pública solo `content` (`FIND-020`, decisión D14/INT-01 pendiente de reabrir); (c) el backpressure `503 + Retry-After` ahora cubre también a las solicitudes encoladas: la extracción corre en `run_in_threadpool` y no bloquea el event loop (`FIND-017`), lo que debilita el mecanismo previsto de `HYP-04`/`HYP-09` (pendiente de re-validación en corrida real).
 
 ---
 
@@ -104,12 +106,15 @@ Se llena a partir de la Etapa 2 (contratos inter-servicio verificados en código
 
 | ID | Hipótesis | Etiqueta | Verificación prevista |
 |---|---|---|---|
-| `HYP-01` | El cuello de botella del sistema bajo carga es la concurrencia de Extraction (`WEB_CONCURRENCY` × `MAX_CONCURRENCY` por réplica, default 1×1) y no la API. | `[HIPÓTESIS]` | Etapa 3/4 con benchmarks reales + perfiles de contenedor. |
+| `HYP-01` | El cuello de botella del sistema bajo carga es la concurrencia de Extraction (`WEB_CONCURRENCY` × `MAX_CONCURRENCY` por réplica, default 1×1) y no la API. | `[CONFIRMADO EN CÓDIGO - FALTA MEDICIÓN]` (Etapa 3A, parcialmente corregido 2026-10-19): los dos cuellos medidos se corrigieron (`FIND-016` sin decodificar imágenes; `FIND-017` con `run_in_threadpool`), pero la capacidad por réplica sigue acotada a 1×1 (decisión medida). Falta la cifra de rps/p99 con el código actual. | Etapa 3B/4 con benchmarks reales + perfiles de contenedor (`HYP-07`). |
 | `HYP-02` | La ausencia de los 4 PDFs oficiales en disco explica que no existan corridas registradas en `docs/test-runs/`. | **`[RESUELTO]`** (2026-10-18): los 4 PDFs están presentes y versionados; hay 5 corridas locales (gitignoreadas) con perfiles aún no corregidos. | `ASK-001` / `ASK-004`. |
 | `HYP-03` | El spike de 100 VUs del TP no puede ejecutarse con `make load-k6` tal como está cableado (usa `spike_tests.js` con 1 VU). | **`[CONFIRMADO]`** (2026-10-18) → `FIND-003`. Decisión del equipo: `spike_tests.js` es el canónico (`ASK-003` resuelta) y `k6-spike.js` fue eliminado; las stages 100 VUs se implementan al final del ciclo. | `FIND-003` (abierto). |
-| `HYP-04` | Los timeouts de Vegeta (501 de 1.500 en la referencia del TP) se explican por la cola de admisión de Extraction (1 slot/worker) más el timeout cliente de 30s. | `[HIPÓTESIS]` | Etapa 3B/4 con corrida real. |
+| `HYP-04` | Los timeouts de Vegeta (501 de 1.500 en la referencia del TP) se explican por la cola de admisión de Extraction (1 slot/worker) más el timeout cliente de 30s. | `[MECANISMO PARCIALMENTE CORREGIDO - FALTA CORRIDA]` (Etapa 3A, `FIND-017`): con el offload a `run_in_threadpool` (2026-10-19) las peticiones encoladas ya no esperan en serie: el 503 debería alcanzar a todo lo que no consigue slot. Queda la cola del backlog (64) y la capacidad 1×1 por réplica. | Etapa 3B/4 con corrida real. |
 | `HYP-05` | El contrato `{content, page_count}` se satisface con texto plano extraído por PyMuPDF; la "conversión a Markdown" del enunciado podría no estar implementada en ningún servicio. | **`[RESUELTO - IMPLEMENTADO]`** (2026-10-17): Markdown nativo implementado en el extractor | `FIND-005` / `ASK-005`: cerrado; ver §8 y `audit-findings.md`. |
 | `HYP-06` | La corrida de referencia de Vegeta (1.500 reqs) presupone 50 req/s; el script actual (`RATE="1/s"`) no reproduce ese perfil y explica que no haya corridas comparables registradas. | `[HIPÓTESIS]` | `FIND-007` / `ASK-008` (confirmar rate intencional sin modificar scripts). |
+| `HYP-07` | El RSS por réplica de Extraction con el código actual (≥2 copias del binario en RAM + memoria C de MuPDF, sin techo de expansión de páginas) se acerca al límite de **1 GiB** del Compose ante PDFs grandes o altamente comprimidos, pudiendo provocar OOMKill de la réplica (1 worker). | `[HIPÓTESIS]` con soporte en código (`FIND-019`); parcialmente atenuada 2026-10-19: el spool se cierra tras leer, pero siguen abiertos los límites de expansión/páginas/tiempo. | Etapa 3B/4 hacia **Infrastructure**: `docker stats` / `docker inspect` (OOMKilled, restarts) durante cargas con el corpus oficial. **No se probarán PDFs bomba sin autorización explícita.** |
+| `HYP-08` | Bajo carga sostenida los healthchecks de Extraction pueden pasar a unhealthy: el probe (`/readyz`, `timeout: 5` en Compose y `3s` en el Dockerfile) se encola detrás de extracciones que bloquean el event loop (retraso medido: 11,6 s en `/health`). | `[HIPÓTESIS]` con mecanismo corregido (`FIND-017` resuelto 2026-10-19 con `run_in_threadpool`; re-medida pendiente). | Etapa 3B/4 hacia **Infrastructure**: estado de salud del contenedor y eventos Docker durante `make load-k6`/`load-vegeta`. |
+| `HYP-09` | Bajo saturación, la mayoría de los 502/30 s que ve el cliente proviene de la cola del backlog del socket (64) + serialización por event loop bloqueado, y **no** de respuestas 503: el backpressure actual cubriría solo a las peticiones que llegan con el loop libre. | `[HIPÓTESIS]` con mecanismo parcialmente corregido (`FIND-017` resuelto 2026-10-19; queda el backlog de 64 conexiones). | Etapa 3B/4: distribución de status (503 vs 502/timeout) correlacionada con latencias en corrida real sobre contenedores. |
 
 ---
 
@@ -127,7 +132,7 @@ Se llena a partir de la Etapa 2 (contratos inter-servicio verificados en código
 | 8 | Healthchecks y `depends_on: service_healthy` definidos para arranque ordenado (api espera a extraction+persistence+mongodb). | `docker-compose.yml:45-58, 93-98, 121-126, 145-150` | `[VERIFICADO-CÓDIGO]` |
 | 9 | Construcción de imágenes desde repos hermanos parametrizable (`*_CONTEXT`, `*_TAG`) con `check` previo a `make up`. | `.env.example`, `Makefile:19-33` | `[VERIFICADO-CÓDIGO]` |
 | 10 | El API orquesta extracción + persistencia (endpoints `/extract` y `/upload-pdf` + CRUD `/documents` registrados en `main.go`). | `pdf-extractext-api/cmd/api/main.go:32-40` | `[VERIFICADO-CÓDIGO]` |
-| 11 | El extractor convierte el PDF a Markdown estructurado (encabezados, listas, párrafos, separación de páginas) de forma nativa, sin dependencias nuevas, preservando el contrato `extracted_text == content`. | `pdf-extractext-extractor/src/pdf_extractext_extractor/domain/extractor.py`; `uv run pytest -q` → 70 passed | `[VERIFICADO-PRUEBA]` |
+| 11 | El extractor convierte el PDF a Markdown estructurado (encabezados, listas, párrafos, separación de páginas) de forma nativa, sin dependencias nuevas, preservando el contrato `extracted_text == content`. | `pdf-extractext-extractor/src/pdf_extractext_extractor/domain/extractor.py`; `make test` → 76 passed, 1 xfailed | `[VERIFICADO-PRUEBA]` |
 | 12 | El contrato público de `POST /extract` devuelve exactamente `{content, page_count}` en runtime (Scrum Guide: `page_count` 16). | `curl` a `https://pdf-extractext.localhost/extract` (2026-10-18) | `[VERIFICADO-PRUEBA]` |
 | 13 | Rechazos de cliente correctos: 400 sin campo `file`, 415 con no-PDF, 405 con método no permitido. | `curl` (2026-10-18) | `[VERIFICADO-PRUEBA]` |
 | 14 | Índice único `checksum_1` existe efectivamente en Mongo; solo Persistence está en la red `data`; puertos 8000/8001/8002/27017 **no** publicados (únicos expuestos: 80/443). | `mongosh getIndexes()`, `docker network inspect`, `docker ps` (2026-10-18) | `[VERIFICADO-PRUEBA]` |
@@ -136,6 +141,16 @@ Se llena a partir de la Etapa 2 (contratos inter-servicio verificados en código
 | 17 | Backpressure real de Extraction: 503 + `Retry-After` directo al upstream bajo saturación (12 `curl` paralelos). | saturación manual (2026-10-18) | `[VERIFICADO-PRUEBA]` |
 | 18 | Persistence es fail-fast: sin conexión ni índice único no arranca; escalado de Extraction a 3 réplicas y vuelta a 1 sin downtime. | `cmd/api/main.go` + verificación en vivo (2026-10-18) | `[VERIFICADO-PRUEBA]` |
 | 19 | `.env` de Infrastructure no está versionado ni commiteado (gitignoreado). | `git check-ignore .env`, `git ls-files .env` (2026-10-18) | `[VERIFICADO-CÓDIGO]` |
+| 20 | Extracción con **una sola apertura** del PDF y `page_count` del mismo objeto: sin doble recorrido ni reabrir el documento para contar páginas (90 = 90 y 16 = 16 verificados por ejecución). | `domain/extractor.py:48-54` + sondas Etapa 3A | `[VERIFICADO-PRUEBA]` |
+| 21 | El documento de PyMuPDF se cierra **siempre** con context manager, incluso ante excepciones: sin fugas de recursos nativos del motor. | `domain/extractor.py:48` (`with pymupdf.open(...)`) | `[VERIFICADO-CÓDIGO]` |
+| 22 | **Cero archivos temporales en disco**: el multipart se retiene 100 % en memoria (`spool_max_size = math.inf` nunca rueda) → no existen colisiones de nombres bajo solicitudes concurrentes; invariant testeado. | `extraction.py:39-49`; `tests/test_extraction.py:58-70` | `[VERIFICADO-CÓDIGO]` + `[VERIFICADO-PRUEBA]` |
+| 23 | Errores ordinarios controlados, sin 500 escapados ni worker tumbado: vacío → 400, no-PDF/corrupto → 422, multipart malformado/sin `boundary`/campo inexistente → 400, cuerpo sobre el límite → 400 (más el mapeo de los handlers a problem+json). | `extraction.py:85-110`, `errors.py`, suite `tests/api` + `tests/integration` | `[VERIFICADO-CÓDIGO]` + `[VERIFICADO-PRUEBA]` |
+| 24 | Backpressure fail-fast real: 503 + `Retry-After` + code `SERVICE_OVERLOADED` sin espera, y `/health` nunca consume slots; probado en unidad y en proceso (3 solicitudes: 1×200 + 2×503 instantáneos) y en runtime Etapa 2 (12 `curl` paralelos). Desde `FIND-017` (2026-10-19) el 503 también alcanza a las solicitudes encoladas, ya que la extracción corre en `run_in_threadpool`. | `admission.py:42-58`; `tests/api/test_admission.py`, `tests/api/test_concurrency.py` | `[VERIFICADO-PRUEBA]` |
+| 25 | Sin estado compartido inseguro entre peticiones: no hay cachés globales, `lru_cache`, hilos ni estructuras mutables compartidas (grep negativo en `src/`); el único contador (`rejections`) pertenece al event loop de su proceso. | grep en `pdf-extractext-extractor/src/` | `[VERIFICADO-CÓDIGO]` |
+| 26 | Contrato de los 5 campos estricto y `extracted_text == content` como el mismo string; `page_count` correcto en los 4 PDFs oficiales (90/16/42/62 páginas). | `tests/api/test_extract.py`, `tests/integration/test_api_contract.py` + sondas | `[VERIFICADO-PRUEBA]` |
+| 27 | Configuración de concurrencia **correcta en Infrastructure** (1 worker × 1 slot, medida y documentada en ADR 0002) y límites 1 CPU / 1 GiB aplicados a la réplica. | `pdf-extractext-infrastructure/docker-compose.yml:77-90`, `.env.example:18-19` | `[VERIFICADO-CÓDIGO]` |
+| 28 | La salida Markdown es **idéntica byte a byte** en los 5 PDFs de prueba aun desactivando la bandera de imágenes: base segura para optimizar `FIND-016` sin romper el contrato (sonda desechable ya eliminada). | sonda local Etapa 3A + `TestImageBlocksAreSkipped` | `[VERIFICADO-PRUEBA]` |
+| 29 | El PDF pesado no genera falsos positivos de error: 90 páginas, 121 KiB de Markdown, respuesta 200 con `page_count` coherente; el SHA-256 sobre 8,49 MiB cuesta 0,025 s (despreciable). | sondas Etapa 3A | `[VERIFICADO-PRUEBA]` |
 
 ---
 
@@ -149,6 +164,18 @@ Se llena a partir de la Etapa 2 (contratos inter-servicio verificados en código
 | Contenido de `.env` de Infrastructure | Presente en disco (893 B), gitignoreado y no versionado; credenciales por defecto `dev`/`dev`. No releído por contención con secretos. | Hechos verificados → `ASK-007`; la interpretación es del equipo. |
 | Ejecución efectiva de los tests de integración de Persistence | Requieren Docker/testcontainers; en esta sesión solo se verificó su compilación (`go vet -tags=integration`). | Etapa 3 si se habilita Docker. |
 | Comportamiento bajo fallo total de un upstream (Mongo/Extraction apagados) | La inducción de caídas requiere detener servicios; no se ejecutó por restricción de la etapa. La traducción de errores está verificada solo en código (503 de Persistence existe en catálogo; el API enmascara igualmente → `FIND-012`). | Etapa 3 (chaos controlado) si el equipo lo habilita. |
+
+### 7.1 Nuevos huecos detectados en la Etapa 3A (auditoría de Extraction)
+
+| Ítem | Motivo | Necesidad |
+|---|---|---|
+| Specs y carga del host de auditoría (CPU/modelo/carga) | El usuario denegó el acceso a `/proc` (2026-10-19). Los tiempos absolutos de las sondas de la Etapa 3A **no son comparables** con los de Issue #9; solo se reportan ratios intra-máquina (mismo host, misma corrida). | Repetir las mediciones A/B en el entorno de benchmark con specs conocidas. |
+| RSS real por réplica en contenedor y memoria C de MuPDF | `tracemalloc` solo traza asignaciones de Python; sin `/proc`, sin `docker stats` y sin levantar el stack en esta etapa. El pico Python medido (20,7 MiB para 8,49 MiB de entrada) **no incluye** el working set de MuPDF. | Etapa 3B/4: `docker stats` / `docker inspect` durante carga (`HYP-07`). |
+| Estado de salud del healthcheck de Extraction bajo carga | Requiere stack de contenedores + perfiles de carga (hoy abiertos: `FIND-003`, `FIND-007`). | Etapa 3B/4 (`HYP-08`). |
+| Distribución real 503 vs 502/timeout en corrida con contenedores | Las pruebas de concurrencia de la Etapa 3A fueron **in-process** (ASGI), no sobre Traefik/API/contenedores. | Etapa 3B/4 (`HYP-09`). |
+| OOM real ante un PDF de expansión agresiva (PDF bomba) | Sería una prueba destructiva: **no intentada** por restricción 6. | Solo con autorización explícita (`HYP-07`). |
+| Matriz completa de PDFs cifrados/restringidos | Solo se verificó AES-256 con contraseña de usuario (`FIND-018`); no se probaron RC4, contraseñas vacías ni documentos con permisos de lectura restringidos. | Ampliar la matriz en Etapa 3B si el equipo lo aprueba. |
+| Si PyMuPDF libera el GIL durante `get_text("dict")` | Requiere inspección del binding C, no disponible en la etapa. `FIND-017` ya se corrigió con `run_in_threadpool`, pero el paralelismo CPU real depende del GIL. | Necesario para estimar el speedup de concurrencia en la etapa de benchmarks. |
 
 ---
 
@@ -214,4 +241,45 @@ servicios (RFC 9457, `CON-018`/`CON-019`) y resolver `FIND-012`…`FIND-015`.
 
 **Estado de los hallazgos (tras la fase de correcciones, 2026-10-19):** abiertos `FIND-003`, `FIND-007`, `FIND-011` (cargas y PDF oficial duplicado); resueltos `FIND-001`/`FIND-002`/`FIND-004`/`FIND-005`/`FIND-006`/`FIND-008`/`FIND-009`/`FIND-010`/`FIND-012`/`FIND-013`/`FIND-014`/`FIND-015` y `CON-017`/`CON-018`/`CON-019`.
 
-**Prioridad declarada por el equipo (2026-10-18):** primero el funcionamiento correcto del sistema. Las pruebas de carga (perfiles de k6 y Vegeta, `FIND-003`/`FIND-007`) y las correcciones abiertas relacionadas con benchmarks (`FIND-011`, `FIND-012`…`FIND-015`) quedan para la etapa final.
+**Prioridad declarada por el equipo (2026-10-18):** primero el funcionamiento correcto del sistema. Las pruebas de carga (perfiles de k6 y Vegeta, `FIND-003`/`FIND-007`) y las correcciones abiertas relacionadas con benchmarks (`FIND-011`) quedan para la etapa final.
+
+### Etapa 3A — Auditoría de Extraction (Área B), 2026-10-19
+
+Auditoría profunda de `pdf-extractext-extractor` y de su interfaz directa con `pdf-extractext-api`. **Solo lectura**: no se modificó código, Dockerfiles, Compose, scripts ni datos de prueba.
+
+| # | Repositorio | Archivo | Tipo | Descripción del cambio | Hallazgo / decisión |
+|---|---|---|---|---|---|
+| C-25 | `pdf-extractext-infrastructure` | `audit/audit-findings.md` | doc | Nuevos `FIND-016`…`FIND-022` (16 campos) y causas raíz `RC-010`…`RC-015` | Etapa 3A |
+| C-26 | `pdf-extractext-infrastructure` | `audit/audit-master.md` | doc | Etapa 3A marcada completada; nota de concurrencia en §2; observaciones de contrato en §4.1; `HYP-01`/`HYP-04` actualizados y `HYP-07`…`HYP-09` agregados; §6 con 10 nuevas verificaciones; §7.1 con los huecos nuevos | Etapa 3A |
+
+**Sondas de verificación** (scripts desechables en `/tmp/opencode/`, fuera del repo, ejecutados con el `.venv` del extractor y `PYTHONDONTWRITEBYTECODE=1`; cero cambios fuera de `audit/`: `git status --porcelain` vacío en API, Extractor y Persistence, y en Infrastructure solo los documentos de auditoría):
+
+| Sonda | Qué probó | Resultado |
+|---|---|---|
+| `audit_3a_probe.py` | PDF cifrado AES-256 → mapeo de error; tiempo/RAM; `/health` concurrente | Cifrado → **500** (`FIND-018`); `/health` retrasado **11,6 s** (`FIND-017`) |
+| `audit_3a_mem.py` | Aislamiento de tiempos: apertura vs `get_text()` vs `get_text("dict")` vs SHA-256 | `dict` 6,0-6,7 s vs plano 0,19-0,34 s en `heavy.292.pdf`; SHA-256 0,025 s |
+| `audit_3a_time_mem.py` | Desglose de coste por operación (caliente) + pico de memoria de una petición `/extract` con top de ocupadores | `get_text("dict")` domina el tiempo; pico trazado por Python ≈ 19-21 MiB (`FIND-019`) |
+| `audit_3a_breakdown.py` | Ratio dict/plain en 2 PDFs | 19,5× (heavy) y 1,6× (Scrum Guide) |
+| `audit_3a_flags.py` | Coste por bandera de `get_text("dict")` y composición del PDF | **sin `TEXT_PRESERVE_IMAGES`: 6,67 s → 0,32 s**; 87 imágenes embebidas (`FIND-016`) |
+| `audit_3a_flags_equiv.py` | ¿La salida Markdown cambia al quitar la bandera? | **Idéntico byte a byte en los 5 PDFs de prueba** |
+| `audit_3a_speedup.py` | Speedup completo del pipeline + identidad de salida | 14,3× / 4,4× / 1,5× / 1,0× según PDF; Markdown idéntico en todos |
+| `audit_3a_server_mem.py` | Pico de memoria solo del lado del servidor (tracemalloc) | **20,7 MiB** pico para 8,49 MiB de entrada; 1,25 MiB al final |
+| `audit_3a_admission.py` | 3 solicitudes concurrentes: simultáneas vs llegadas con el loop bloqueado | A: `200 + 2×503`; B: `200` en 3,53 s + `200` en 7,46 s (serializada) + `503` (`FIND-017`) |
+
+**Estado de los hallazgos tras la Etapa 3A (2026-10-19):** abiertos `FIND-003`, `FIND-007`, `FIND-011` (cargas y PDF duplicado) **más `FIND-016`…`FIND-022`** (todos de Extraction: 1 cuello de botella de CPU, 1 de concurrencia, 1 contrato de errores, 1 robustez/memoria, 1 optimización sujeta a decisión, 2 de configuración/documentación). Resueltos los anteriores: `FIND-001`/`002`/`004`/`005`/`006`/`008`/`009`/`010`/`012`/`013`/`014`/`015`.
+
+### Fase de correcciones de la Etapa 3A — Bloque A + B1, 2026-10-19
+
+Sesión aprobada por el equipo: resolver `FIND-016`…`FIND-019` (parcial), `FIND-021` y `FIND-022`. Sin benchmarks (solo `make test`), sin commits (todo en working tree) y con `INVALID_PDF_CONTENT` como contrato de `FIND-018` (cero cambios en API/OpenAPI).
+
+| # | Repositorio | Archivo | Tipo | Descripción del cambio | Verificación | Hallazgo |
+|---|---|---|---|---|---|---|
+| C-27 | `pdf-extractext-extractor` | `src/pdf_extractext_extractor/domain/extractor.py` | código | Flags `TEXTFLAGS_DICT & ~TEXT_PRESERVE_IMAGES` en `get_text("dict")` (sin decodificar imágenes descartadas) y `document.needs_pass` → `InvalidPDFContentError` | `make test` → **76 passed, 1 xfailed**; `TestImageBlocksAreSkipped`, `TestEncryptedPdf` | `FIND-016` / `FIND-018` |
+| C-28 | `pdf-extractext-extractor` | `src/pdf_extractext_extractor/extraction.py` | código | `extract_pdf_data` vía `run_in_threadpool` (event loop libre) y `await upload.close()` tras leer el multipart | `tests/api/test_concurrency.py` (2 tests, fallan sin el fix) | `FIND-017` / `FIND-019` (parcial) |
+| C-29 | `pdf-extractext-extractor` | `config.py`, `gunicorn.conf.py`, `docker-compose.yml`, `README.md` | config/doc | Eliminado el setting muerto `port` (puerto real 8001) y workers default 4 → 1 (alineado al ADR 0002) | `make test` (verde); `tests/test_container_config.py` sin regresión | `FIND-021` / `FIND-022` |
+| C-30 | `pdf-extractext-extractor` | `tests/conftest.py`, `tests/domain/test_extractor.py`, `tests/api/test_extract.py`, `tests/api/test_concurrency.py` | test | Fixture `encrypted_pdf` compartida; tests de PDF cifrado (dominio + API), de concurrencia y de bandera de imágenes; docstrings compactados (Clean Code) en los archivos tocados | `make test` → 76 passed, 1 xfailed | `FIND-017` / `FIND-018` / `FIND-016` |
+
+**Estado de los hallazgos (tras esta sesión, 2026-10-19):**
+- Resueltos: `FIND-016`, `FIND-017`, `FIND-018`, `FIND-021`, `FIND-022`.
+- Parcial: `FIND-019` (spool liberado; límites de expansión/páginas/tiempo pendientes).
+- Abiertos: `FIND-003`, `FIND-007`, `FIND-011` (cargas y PDF duplicado), `FIND-020` (decisión de contrato D14).
