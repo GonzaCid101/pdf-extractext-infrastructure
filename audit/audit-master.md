@@ -17,7 +17,7 @@ Carpeta autorizada: `pdf-extractext-infrastructure/audit/` (único lugar válido
 | Etapa 1 | Relevamiento estructural y línea base | **COMPLETADA (2026-10-17); RE-VERIFICADA (2026-10-18)** | 4/4 repositorios inventariados. `FIND-001`…`FIND-007` definidos; `FIND-005` y `FIND-006` resueltos el 2026-10-17. Re-verificación 2026-10-18: se ajustaron `FIND-001`/`FIND-002`, se agregaron `FIND-008`…`FIND-011` y se alinearon los documentos de infraestructura (§8). |
 | Etapa 2 | Auditoría funcional end-to-end e integración | **COMPLETADA (2026-10-18)** | Flujo real trazado y verificado en runtime (§4); matriz `INT-XX` completa; nuevos `FIND-013`…`FIND-015`; `FIND-012` extendido al caso 422. Sin correcciones de código (solo diagnóstico). |
 | Etapa 3A | Auditoría del microservicio de extracción (Área B) | **COMPLETADA (2026-10-19); CORRECCIONES APLICADAS (2026-10-19)** | `pdf-extractext-extractor` + interfaz con API inspeccionados en profundidad: algoritmo/Markdown, memoria, concurrencia/workers, errores y backpressure. Nuevos `FIND-016`…`FIND-022`, `RC-010`…`RC-015`, `HYP-07`…`HYP-09`. La auditoría fue solo inspección + sondas locales (ya eliminadas); la fase de correcciones aprobada (Bloque A + B1) resolvió `FIND-016`…`FIND-018`, `FIND-021`, `FIND-022` y parcialmente `FIND-019` (§8, C-27…C-30). |
-| Etapa 3B | (definida por el equipo) | PENDIENTE | — |
+| Etapa 3B | Auditoría de API, orquestación y persistencia (Área C) | **COMPLETADA (2026-10-19); CORRECCIONES APLICADAS (2026-10-19)** | `pdf-extractext-api` + `pdf-extractext-persistence` inspeccionados: orquestación, cliente HTTP, memoria/BodyLimit, backpressure, Mongo/índices, idempotencia, fallos parciales y Clean Code. Nuevos `FIND-023`…`FIND-031`, `RC-016`…`RC-019`, `ASK-010`…`ASK-013`. La fase de correcciones aprobada resolvió `FIND-023`…`FIND-031` (§8, C-35…C-40). |
 | Etapa 3C | (definida por el equipo) | PENDIENTE | — |
 | Etapa 4 | (definida por el equipo) | PENDIENTE | — |
 | Etapa 5 | Cierre y reporte final | PENDIENTE | — |
@@ -283,3 +283,32 @@ Sesión aprobada por el equipo: resolver `FIND-016`…`FIND-019` (parcial), `FIN
 - Resueltos: `FIND-016`, `FIND-017`, `FIND-018`, `FIND-021`, `FIND-022`.
 - Parcial: `FIND-019` (spool liberado; límites de expansión/páginas/tiempo pendientes).
 - Abiertos: `FIND-003`, `FIND-007`, `FIND-011` (cargas y PDF duplicado), `FIND-020` (decisión de contrato D14).
+
+### Etapa 3B — Auditoría de API, orquestación y Persistence (Área C), 2026-10-19
+
+Auditoría estática de `pdf-extractext-api` y `pdf-extractext-persistence`. **Solo lectura**: no se modificó código, Dockerfiles, Compose, scripts ni datos.
+
+| # | Repositorio | Archivo | Tipo | Descripción del cambio | Hallazgo / decisión |
+|---|---|---|---|---|---|
+| C-31 | `pdf-extractext-infrastructure` | `audit/audit-findings.md` | doc | Nuevos `FIND-023`…`FIND-031` (16 campos) y `RC-016`…`RC-019` | Etapa 3B |
+| C-32 | `pdf-extractext-infrastructure` | `audit/audit-benchmark.md` | doc | §5: impacto de API/Persistence ante PDFs repetidos, cliente HTTP y Mongo; métricas a medir en la corrida final | Etapa 3B |
+| C-33 | `pdf-extractext-infrastructure` | `audit/audit-decisions.md` | doc | `ASK-010`…`ASK-013` (backpressure, RFC 9457 Persistence no reproducible, tamaño, caché de checksum) | Etapa 3B |
+| C-34 | `pdf-extractext-infrastructure` | `audit/audit-master.md` | doc | Etapa 3B marcada completada | Etapa 3B |
+| C-35 | `pdf-extractext-api` | `internal/services/httpclient.go`, `extraction_client.go`, `persistence_client.go` | code | `Transport` keep-alive explícito compartido (`MaxIdleConnsPerHost=100`, `IdleConnTimeout`) | `FIND-024` |
+| C-36 | `pdf-extractext-api` | `cmd/api/main.go`, `pdf-extractext-persistence/cmd/api/main.go` | code | `ReadTimeout`/`WriteTimeout`/`IdleTimeout` en Fiber y `http.Server` | `FIND-025` |
+| C-37 | `pdf-extractext-api` | `internal/api/errors.go`, `upload_pdf.go`, `extract.go` (+ tests) | code | `isTimeout` unifica detección de deadline → 504 (`GATEWAY_TIMEOUT`) | `FIND-031` |
+| C-38 | `pdf-extractext-api`, `pdf-extractext-infrastructure` | `internal/core/config.go`, `.env.example`, `README.md`, `docker-compose.yml` | code+doc | `MAX_FILE_SIZE_MB` a 16 (umbral de spool de fasthttp); README corregido | `FIND-030`, `ASK-012` |
+| C-39 | `pdf-extractext-persistence` | `internal/domain/document.go`, `infra/mongo/document_repository.go`, `api/documents.go` (+ tests) | code | Consolida en `Document`; elimina `PDFDocument`, `repository/`, `pdfdocument_mapper.go`, `existingToResponse` | `FIND-027` |
+| C-40 | `pdf-extractext-api`, `pdf-extractext-persistence` | varios `*.go`/`*.md`/`audit/*.md` | code+doc | Clean Code (sin `FIND-XXX`/`Issue #N`), cierre `FIND-023`…`FIND-031`, `ASK-010`…`ASK-013` | `FIND-028`, `ASK-010`…`ASK-013` |
+
+**Verificación ejecutada (solo lectura):** `go build ./...` y `go vet ./...` en ambos repos (verdes); lectura cruzada de `fasthttp@v1.51.0/http.go`, `net/http/transport.go` y `fiber@v2.52.15`. `git log --all` de Persistence **no** contiene `2af0e62` (`FIND-026`).
+
+**Verificación post-corrección (2026-10-19):** `go build ./...`, `go vet ./...`, `go vet -tags=integration ./...` y `go test -race ./...` verdes en `pdf-extractext-api` y `pdf-extractext-persistence`. El `git pull` trajo `2af0e62` (RFC 9457) → `FIND-026`/`FIND-029` resueltos por sincronización.
+
+**Estado de los hallazgos (tras la Etapa 3B, 2026-10-19):** abiertos `FIND-003`, `FIND-007`, `FIND-011` (cargas y PDF duplicado). **`FIND-023`…`FIND-031` resueltos** (implementados o cerrados por decisión de equipo). Resueltos hasta `FIND-022` según el registro anterior.
+
+**Puntos inmediatamente corregibles (bajo decisión del equipo):**
+- `FIND-024` / `FIND-025` / `FIND-031`: `Transport` con pool explícito, timeouts de servidor y detección unificada de timeout (bajo riesgo, sin cambio de contrato).
+- `FIND-027` / `FIND-028` / `FIND-029`: limpieza de código muerto (`PDFRepository`, mapper legado, tipo `PDFDocument` duplicado), comentarios concisos de 1 línea sin IDs de auditoría, y README de Persistence al estado real.
+- `FIND-026` / `ASK-011`: resolver la discrepancia del commit RFC 9457 de Persistence **antes** de dar `CON-018` por resuelta.
+- `FIND-023` / `FIND-030` / `ASK-010` / `ASK-012`: decisiones de arquitectura (backpressure y tamaño) que afectan el spike de 100 VUs.

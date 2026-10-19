@@ -25,8 +25,12 @@ Taxonomía: `[VERIFICADO-CÓDIGO]`, `[VERIFICADO-PRUEBA]`, `[DOCUMENTADO-NO-VERI
 | `RC-011` | La extracción CPU-bound se ejecuta como código síncrono dentro del endpoint `async def` (un solo event loop). | `FIND-017` | Resuelta (2026-10-19) | `[VERIFICADO-CÓDIGO]` + `[VERIFICADO-PRUEBA]` |
 | `RC-012` | El mapeo de errores de PyMuPDF solo cubre `FileDataError`/`EmptyFileError`; el resto cae en el `except Exception` genérico. | `FIND-018` | Resuelta (2026-10-19) | `[VERIFICADO-PRUEBA]` |
 | `RC-013` | El límite defensivo acota solo el tamaño de entrada: sin límite de expansión, páginas ni tiempo. | `FIND-019` | Parcial (2026-10-19): spool liberado; límites pendientes | `[VERIFICADO-CÓDIGO]` |
-| `RC-014` | El contrato exige `extracted_text == content`: el Markdown viaja dos veces. | `FIND-020` | Abierta (decisión de contrato) | `[VERIFICADO-PRUEBA]` |
+| `RC-014` | El contrato exige `extracted_text == content`: el Markdown viaja dos veces. | `FIND-020` | Resuelta (decisión de equipo: se conserva) | `[VERIFICADO-PRUEBA]` |
 | `RC-015` | Los defaults de arranque del extractor nunca se alinearon con la decisión medida del ADR 0002 (1 worker). | `FIND-021` | Resuelta (2026-10-19) | `[VERIFICADO-CÓDIGO]` |
+| `RC-016` | La API no tiene contrapresión propia: no limita tasa ni conexiones concurrentes hacia Extraction/Persistence. | `FIND-023` | Resuelta (decisión de equipo: backpressure en Extraction, ADR D10) | `[VERIFICADO-CÓDIGO]` |
+| `RC-017` | El cliente HTTP de la API usa el `DefaultTransport` de Go (2 conexiones inactivas por host): bajo carga no sostiene keep-alive y abre/destruye sockets. | `FIND-024` | Resuelta (2026-10-19) | `[VERIFICADO-CÓDIGO]` |
+| `RC-018` | Sin timeout de lectura/escritura en `http.Server` de Persistence y sin `IdleTimeout`/`ReadTimeout` en ninguno de los dos servicios Go. | `FIND-025`, `FIND-031` | Resuelta (2026-10-19) | `[VERIFICADO-CÓDIGO]` |
+| `RC-019` | Deriva interna de Persistence: código legado de la issue #3 convive con el activo, el repo no sincronizó las correcciones registradas (RFC 9457, README) y arrastra comentarios verbosos/IDs de auditoría. | `FIND-026`, `FIND-027`, `FIND-028`, `FIND-029` | Resuelta (2026-10-19) | `[VERIFICADO-CÓDIGO]` |
 
 ---
 
@@ -492,4 +496,193 @@ Taxonomía: `[VERIFICADO-CÓDIGO]`, `[VERIFICADO-PRUEBA]`, `[DOCUMENTADO-NO-VERI
 | **Causa raíz** | `RC-005` |
 | **Acción** | Eliminar `settings.port` y unificar el puerto documentado en 8001. |
 | **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-19) — `config.py` (setting eliminada), `README.md` (tabla y ejemplos a 8001). |
+| **Restricciones** | — |
+
+### FIND-023
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-023` |
+| **Título** | La API no tiene backpressure propio (sin rate limiting ni límite de concurrencia) |
+| **Etapa** | Etapa 3B (2026-10-19) |
+| **Categoría** | arquitectura / sobrecarga |
+| **Severidad** | Media |
+| **Repositorio** | `pdf-extractext-api` |
+| **Ubicación** | `cmd/api/main.go:24-40` (sin middleware de límite ni `limiter`); único límite = `BodyLimit` (`main.go:26`) |
+| **Descripción** | La API es un proxy sin contrapresión: acepta 100 VUs simultáneos y reenvía todo a Extraction/Persistence. El límite de 30 s es solo por request, no acota concurrencia ni tasa; bajo carga el backpressure efectivo queda delegado (y solo) en el 503 de Extraction. |
+| **Evidencia** | `main.go` registra `RequestID` y rutas, sin `limiter.New` ni semáforo; `extraction_client.go:36` usa `http.Client` sin `MaxConnsPerHost`. |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | Bajo el spike de 100 VUs, el exceso de tráfico se intenta reenviar en vez de rechazarse en el borde; el usuario final recibe 503/502/timeout en lugar de un rechazo temprano controlado (429). |
+| **Descubrimiento** | Etapa 3B, bloque de orquestación/sobrecarga de API. |
+| **Causa raíz** | `RC-016` |
+| **Acción** | No se añade rate limiter/semáforo: el control de admisión vive en `Extraction` (503 + `Retry-After`, ADR D10), escalable 1→5 réplicas (`ASK-010`). |
+| **Estado** | Resuelto (decisión de equipo, 2026-10-19) |
+| **Restricciones** | Cambio de comportamiento descartado por decisión. |
+
+### FIND-024
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-024` |
+| **Título** | Los clientes HTTP de la API usan el `DefaultTransport` (2 conexiones keep-alive por host) |
+| **Etapa** | Etapa 3B (2026-10-19) |
+| **Categoría** | rendimiento / concurrencia |
+| **Severidad** | Alta |
+| **Repositorio** | `pdf-extractext-api` |
+| **Ubicación** | `internal/services/extraction_client.go:33-38` y `persistence_client.go:51-56` (`&http.Client{Timeout: …}` sin `Transport`) |
+| **Descripción** | Al no definir `Transport`, Go usa `http.DefaultTransport`: `MaxIdleConnsPerHost = 2` (`net/http/transport.go:62`). El cliente **no crea una conexión nueva por request** (reutiliza keep-alive), pero con >2 ejecuciones concurrentes por host las conexiones sobrantes se abren, se usan y se tienen que cerrar en vez de reutilizarse. |
+| **Evidencia** | `GOROOT/src/net/http/transport.go:54-62`: `MaxIdleConns:100`, `MaxIdleConnsPerHost:2`, `IdleConnTimeout:90s`. Bajo 100 VUs contra 1 host → churn de sockets y consumo de puertos efímeros/`TIME_WAIT`. |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` (fuente: stdlib) |
+| **Impacto** | Overhead de conexión por request bajo carga; no hay fuga (keep-alive sí funciona), pero el pool por defecto es pequeño para el escenario de 100 VUs. Mitigable sin tocar la lógica: `Transport` con `MaxIdleConnsPerHost`/`MaxConnsPerHost` explícitos. |
+| **Descubrimiento** | Etapa 3B, bloque de cliente HTTP. |
+| **Causa raíz** | `RC-017` |
+| **Acción** | `Transport` compartido con `MaxIdleConns`/`MaxIdleConnsPerHost = 100` e `IdleConnTimeout` explícitos en ambos clientes. |
+| **Estado** | Resuelto (implementado 2026-10-19) |
+| **Restricciones** | — |
+
+### FIND-025
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-025` |
+| **Título** | Sin timeouts de servidor (`ReadTimeout`/`IdleTimeout`) en API; sin `ReadTimeout`/`IdleTimeout` en Persistence |
+| **Etapa** | Etapa 3B (2026-10-19) |
+| **Categoría** | robustez / configuración |
+| **Severidad** | Media |
+| **Repositorio** | `pdf-extractext-api`, `pdf-extractext-persistence` |
+| **Ubicación** | `api cmd/api/main.go:43` (`app.Listen` sin `ReadTimeout`/`IdleTimeout`); `persistence cmd/api/main.go:45-49` (`http.Server` con solo `ReadHeaderTimeout`) |
+| **Descripción** | Falta `IdleTimeout` en ambos y `ReadTimeout` en Persistence. Bajo 100 VUs con keep-alive, una conexión ociosa puede retener recursos más de lo previsto; en fasthttp se configura con `IdleTimeout` en `fiber.Config`. |
+| **Evidencia** | `persistence/main.go:48` solo fija `ReadHeaderTimeout: 5s`; `api/main.go:24` config sin timeouts de idle/read. |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | Riesgo de acumulación de conexiones lentas/idle bajo carga sostenida; relacionado con `HYP-08`. |
+| **Descubrimiento** | Etapa 3B, bloque de configuración de servidor. |
+| **Causa raíz** | `RC-018` |
+| **Acción** | Añadidos `ReadTimeout`/`WriteTimeout`/`IdleTimeout` explícitos en API (Fiber) y Persistence (`http.Server`). |
+| **Estado** | Resuelto (implementado 2026-10-19) |
+| **Restricciones** | — |
+
+### FIND-026
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-026` |
+| **Título** | Comentarios/contrato de error documentados como RFC 9457 pero el código de Persistence sigue con envelope `{code,message}` y comentarios en contradicción |
+| **Etapa** | Etapa 3B (2026-10-19) |
+| **Categoría** | documentación / contrato |
+| **Severidad** | Baja |
+| **Repositorio** | `pdf-extractext-persistence` |
+| **Ubicación** | `internal/api/errors.go:23-24` ("Sin RFC 9457") vs README/CON-018 (adopción RFC 9457); `internal/api/documents.go:84-97` (comentario de doble formato de error) |
+| **Descripción** | El repo Persistence **no contiene** el commit `2af0e62` ni `internal/api/errors.go` con `problemResponse`/`problemCatalog` que el registro de auditoría (C-22/CON-018) da por implementados: citó código de una rama que no está en `main` de este clon. El envelope real es `{code,message}` (sin `type`/`title`/`status`), y los comentarios lo declaran "Sin RFC 9457". |
+| **Evidencia** | `git log --all --oneline` de Persistence no encuentra `2af0e62`; grep `problemCatalog\|problemResponse\|application/problem+json` → 0 resultados en el repo. El commit de API `fb3d7c3` sí existe; el de Persistence no. |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | La afirmación `[RESUELTA]` de `CON-018` no es reproducible en Persistence: su envelope no cumple RFC 9457. Afecta a la validez del registro de decisiones. |
+| **Descubrimiento** | Etapa 3B, verificación cruzada del registro de correcciones contra los repos. |
+| **Causa raíz** | `RC-019` |
+| **Acción** | `git pull` del equipo trajo `2af0e62` a `main`: `problemCatalog`/`problemResponse` (`application/problem+json`) presentes. `CON-018` válido. |
+| **Estado** | Resuelto (2026-10-19, por sincronización del clon) |
+| **Restricciones** | — |
+
+### FIND-027
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-027` |
+| **Título** | Código muerto y tipo duplicado en Persistence (`PDFRepository`, `DomainToMongo`/`MongoToDomain`, `PDFDocument`, `existingToResponse`) |
+| **Etapa** | Etapa 3B (2026-10-19) |
+| **Categoría** | clean code / mantenibilidad |
+| **Severidad** | Media |
+| **Repositorio** | `pdf-extractext-persistence` |
+| **Ubicación** | `internal/repository/pdf_repository.go` (todo el archivo, sin llamadores de producción); `internal/infra/mongo/pdfdocument_mapper.go` (`DomainToMongo`/`MongoToDomain`, solo usados por `pdf_repository`); `internal/domain/pdfdocument.go` (`PDFDocument`, `DuplicateChecksumError`); `internal/api/documents.go:51-60` (`existingToResponse` usado solo desde `createDocumentHandler` por `DuplicateChecksumError`) |
+| **Descripción** | Hay **dos** repositorios y **dos** modelos de documento coexistiendo: el activo (`Document`, `DocumentRepository`, `documentFromBSON`) y el legado de la issue #3 (`PDFRepository`, `PDFDocument`, `DomainToMongo`/`MongoToDomain`). El 409 recupera el documento con `documentFromBSON` y luego lo convierte con `existingToResponse`, puente que conecta ambos mundos. |
+| **Evidencia** | Grep de llamadores de producción: `NewPDFRepository` → 0 fuera de tests + `repository`; `DomainToMongo`/`MongoToDomain` → solo `pdf_repository.go`. El wiring real (`cmd/api/main.go:43`) usa `mongo.NewDocumentRepository`. |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | Doble mantenimiento y confusión sobre cuál es la fuente de verdad del mapeo; los tests de integración podrían estar cubriendo la ruta muerta. |
+| **Descubrimiento** | Etapa 3B, revisión de Clean Code de Persistence. |
+| **Causa raíz** | `RC-019` |
+| **Acción** | Eliminado el legado (`repository/pdf_repository.go`, `pdfdocument_mapper.go`, `PDFDocument`, `existingToResponse`); `DuplicateChecksumError.Existing` migrado a `domain.Document`. |
+| **Estado** | Resuelto (implementado 2026-10-19) |
+| **Restricciones** | — |
+
+### FIND-028
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-028` |
+| **Título** | Comentarios verbosos, comentarios de auditoría embebidos en el código y configuración muerta |
+| **Etapa** | Etapa 3B (2026-10-19) |
+| **Categoría** | clean code / documentación |
+| **Severidad** | Baja |
+| **Repositorio** | `pdf-extractext-api`, `pdf-extractext-persistence` |
+| **Ubicación** | `extraction_client.go:13,36,60`; `persistence_client.go:36,58,136`; `upload_pdf.go:13-14,56`; `documents.go:11-12,27-28`; `errors.go:53`; `persistence documents.go:18-19,26-31,51-52,84-85,93-94`; `persistence middleware.go:28-31,39-40,52-55`; `api main.go:27` (comentario "{\"code\",\"message\"}" describe el catálogo viejo) |
+| **Descripción** | Hay (a) comentarios que referencian IDs de auditoría (`FIND-012/013/014`) que no deben quedar en el código fuente; (b) comentarios que describen la implementación, no el "porqué", duplicando el nombre de la función; (c) en `mongo/pdfdocument_mapper.go`/`document_repository.go` hay bloques anti-TOCTOU repetidos. |
+| **Evidencia** | Grep `FIND-01` en `*.go` de ambos repos → múltiples coincidencias en API y Persistence; comentarios de 3-5 líneas en `persistence client.go:28-33`, `documents.go:18-19`. |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | Ruido y deuda de mantenibilidad; los IDs de auditoría en código se vuelven obsoletos. |
+| **Descubrimiento** | Etapa 3B, revisión de Clean Code. |
+| **Causa raíz** | `RC-019` |
+| **Acción** | Eliminados los IDs `FIND-XXX`/`Issue #N` y los comentarios redundantes; quedan solo comentarios de 1 línea con el *porqué*. |
+| **Estado** | Resuelto (implementado 2026-10-19) |
+| **Restricciones** | — |
+
+### FIND-029
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-029` |
+| **Título** | README de Persistence describe el estado de bootstrap (CRUD "en etapas posteriores") |
+| **Etapa** | Etapa 3B (2026-10-19) |
+| **Categoría** | documentación |
+| **Severidad** | Baja |
+| **Repositorio** | `pdf-extractext-persistence` |
+| **Ubicación** | `README.md:5` ("El CRUD y el repositorio se implementarán en etapas posteriores"), `README.md:137-139` (estructura solo `GET /health`) |
+| **Descripción** | El README contradice el código real (CRUD completo en `router.go:26-37`, `/health/ready`, `/readyz`). Es una regresión respecto de la corrección `FIND-004`/C-16, probablemente porque el README se reescribió a un estado anterior en este clon. |
+| **Evidencia** | `router.go:26-30` registra POST/GET/PATCH/DELETE `/documents`; README:5 dice lo contrario. |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | Documentación engañosa para quien clone el repo. |
+| **Descubrimiento** | Etapa 3B, contraste README ↔ router. |
+| **Causa raíz** | `RC-019` |
+| **Acción** | README al día tras el `git pull` (describe CRUD + probes). |
+| **Estado** | Resuelto (2026-10-19, por sincronización del clon) |
+| **Restricciones** | — |
+
+### FIND-030
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-030` |
+| **Título** | Pico de memoria de la API: el buffer multipart full-body + `BodyLimit` de 50 MB permiten ~70 MB residentes por request |
+| **Etapa** | Etapa 3B (2026-10-19) |
+| **Categoría** | rendimiento / memoria |
+| **Severidad** | Media |
+| **Repositorio** | `pdf-extractext-api` (+ Infrastructure) |
+| **Ubicación** | `cmd/api/main.go:26` (`BodyLimit = MAX_FILE_SIZE_MB*MiB`); `docker-compose.yml:39` (`MAX_FILE_SIZE_MB=50`); `docker-compose.yml` (límite `memory: 512M` de api) |
+| **Descripción** | fasthttp **bufferiza el body completo en RAM** antes de parsear el multipart (`http.go:1254` → `readMultipartForm` → `multipart.NewReader`), en contra de la creencia de "streaming 100 % en memoria sin materializar". El archivo se reenvía luego a Extraction por `io.Pipe` (eso sí es streaming de salida), pero la entrada ya está íntegra en memoria. Con `BodyLimit=50 MB` (compose) el peor caso ronda los ~70 MB por request (buffer de cuerpo + buffer de trabajo multipart + copia de la parte). |
+| **Evidencia** | `fasthttp@v1.51.0/http.go:1240-1259`: con `contentLength>0` hace `readMultipartForm(r, boundary, contentLength, defaultMaxInMemoryFileSize=16MiB)`; el archivo >16 MiB va a **spool en disco temporal** (no a disco del PDF en sí, sino `os.TempDir`), contradiciendo también el README ("cero volcados a disco"). 100 VUs × 50 MB no caben en 512 MiB. |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | Bajo el spike de 100 VUs con PDFs grandes, la API puede llegar a OOMKill (límite 512 MiB) o provocar swap/presión de memoria antes que Extraction sea el cuello. Además, el README de API afirma "cero volcados a disco" pero fasthttp sí hace spool >16 MiB. |
+| **Descubrimiento** | Etapa 3B, verificación del procesamiento del archivo entrante. |
+| **Causa raíz** | `RC-016` (combinado con el límite de 50 MB del compose) |
+| **Acción** | `MAX_FILE_SIZE_MB` fijado a 16 (umbral `defaultMaxInMemoryFileSize`) en config, `.env.example` y compose; README de API corregido (spool >16 MiB). |
+| **Estado** | Resuelto (implementado 2026-10-19) |
+| **Restricciones** | No se ejecutaron cargas; el cálculo es analítico sobre el código de fasthttp. |
+
+### FIND-031
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-031` |
+| **Título** | El timeout de `uploadTimeout` se activa como 504 en el camino del extractor, pero el error de deadline del cliente HTTP puede mapearse a 502 |
+| **Etapa** | Etapa 3B (2026-10-19) |
+| **Categoría** | contrato / errores |
+| **Severidad** | Baja |
+| **Repositorio** | `pdf-extractext-api` |
+| **Ubicación** | `internal/api/upload_pdf.go:52-58`; `internal/services/extraction_client.go:66-68` |
+| **Descripción** | El `http.Client` de Extraction tiene `Timeout: 30s` (línea 36) **y** el handler aplica además un `context.WithTimeout(30s)` (upload_pdf.go:48). Cuando el `http.Client.Timeout` dispara, el error devuelto es `*url.Error` envolviendo un error que satisface `net.Error.Timeout()` pero **no** necesariamente `context.DeadlineExceeded`; el handler comprueba `errors.Is(err, context.DeadlineExceeded)` y, si no coincide, cae a `respondUpstream` → 502 en vez del 504 `GATEWAY_TIMEOUT` documentado. |
+| **Evidencia** | El test `TestExtractionClient_Timeout` (extraction_client_test.go:64-75) solo verifica `require.Error`, sin aserta el tipo ni el status resultante. No hay test que fije el 504 end-to-end por timeout de cliente. |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | Un timeout del extractor puede reportarse como 502 en lugar de 504 según qué capa dispare primero; el contrato OpenAPI/README promete 504. |
+| **Descubrimiento** | Etapa 3B, revisión del manejo de fallos parciales. |
+| **Causa raíz** | `RC-018` |
+| **Acción** | Helper `isTimeout` (`context.DeadlineExceeded`/`os.ErrDeadlineExceeded`/`net.Error.Timeout`) unifica el mapeo a 504 en upload/extract; tests de timeout de red y E2E. |
+| **Estado** | Resuelto (implementado 2026-10-19) |
 | **Restricciones** | — |
