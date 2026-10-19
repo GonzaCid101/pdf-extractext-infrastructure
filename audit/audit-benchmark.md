@@ -118,8 +118,45 @@ Coherencia estática observada: `run_vegeta.sh` fija `DURATION=30s`, `TIMEOUT=30
 
 ---
 
-## 5. Restricciones aplicadas en la generación de este documento
+## 5. Impacto esperado de API/Persistence en las corridas finales (Etapa 3B, 2026-10-19)
+
+Análisis estático; **sin ejecutar cargas** (restricción 6). Puntos a contrastar en la corrida real.
+
+### 5.1 PDF repetido (`POST /extract` vs `POST /upload-pdf`)
+
+- **`/extract` (stateless):** no consulta Persistence. El mismo PDF siempre dispara `Extraction` de nuevo y responde 200. Con los 4 PDFs rotados por k6/Vegeta, el costo CPU se paga completo en cada request.
+- **`/upload-pdf` (orquestado):** **no hay caché/consulta previa por checksum**. Flujo real: `Extraction` (siempre) → `Persistence.Create` → `InsertOne` a ciegas → el índice único `checksum_1` dispara `IsDuplicateKeyError` → recupera el existente → 409 con el documento. Es decir, el caso (a) "efecto caché" **no existe**; aplica (b): siempre se extrae y luego 409. Bajo carga repetida el trabajo de extracción se duplica y solo se evita la segunda escritura.
+- **Idempotencia / concurrencia:** el `Save` es `insert` (no `upsert`). No hay `race` que duplique documentos (el índice `unique` lo impide y el perdedor cae en 409), pero sí hay *retrabajo*: N clientes simultáneos con el mismo PDF ejecutan N extracciones y N-1 inserts fallidos.
+- **Implicación para el benchmark:** los PDFs rotados son 4 contenidos (uno de ellos `FIND-011` es duplicado de `heavy.292.pdf`), así que dentro de una corrida de Vegeta de 1.500 reqs el mismo checksum aparece muchas veces → se esperan muchos **409**, no 201. Los percentiles de `/upload-pdf` medirán extracción + escritura fallida, no caché.
+
+### 5.2 Cliente HTTP y concurrencia de la API
+
+> **Post-corrección (2026-10-19):** `FIND-024`, `FIND-025` y `FIND-030` fueron resueltos antes de la corrida; se anotan abajo los valores vigentes.
+
+- `MaxIdleConnsPerHost=100` con `IdleConnTimeout` explícito (resuelto, `FIND-024`): sin churn de conexiones esperado al sostener keep-alive con 100 VUs sobre 1 host.
+- Sin rate limiting ni semáforo (decisión del equipo, `ASK-010`): los 100 VUs llegan enteros a Traefik/Extraction; el rechazo efectivo lo produce el 503 de Extraction, no el borde.
+- **`MAX_FILE_SIZE_MB=16`** (resuelto, `FIND-030`): cubre el PDF pesado (8,9 MB) y se fija bajo el umbral de spool de fasthttp; la memoria de la API (límite 512 MiB) sigue siendo el recurso a vigilar con `docker stats`.
+
+### 5.3 Persistencia / Mongo
+
+- Cliente Mongo único y reutilizado (`mongo.Connect` una vez, pool del driver por defecto): correcto, sin conexión por request.
+- Timeouts explícitos en `http.Server` (resuelto, `FIND-025`) y timeout de red mapeado a 504 `GATEWAY_TIMEOUT` (resuelto, `FIND-031`): un Mongo degradado no se reporta como 502 genérico.
+- La recuperación del documento existente en el 409 (`FindOne` extra) ocurre solo en el camino de conflicto: con checksums repetidos añade una lectura por cada 409.
+
+### 5.4 Qué medir en la corrida final
+
+| Punto | Métrica / salida esperada |
+|---|---|
+| `/upload-pdf` con PDF repetido | Proporción 201 vs 409 y p95/p99 (retrabajo de extracción) |
+| Cliente API bajo 100 VUs | `docker stats` de api (RSS vs 512 MiB), `TIME_WAIT`, latencia p99 |
+| Backpressure | Distribución 503 (borde/servicio) vs 502/timeout (`HYP-04`, `HYP-09`) |
+| Persistencia | Latencia de `POST /documents` y de la `FindOne` de conflicto |
+
+---
+
+## 6. Restricciones aplicadas en la generación de este documento
 
 - No se ejecutaron benchmarks, servicios ni cargas (restricción 6 del enunciado de auditoría).
 - No se modificaron scripts, Dockerfiles, compose ni datos de prueba.
 - Hashes calculados con `sha256sum` sobre el único PDF presente; tamaños con `ls -la`/`wc -c`.
+- §5 es análisis estático del código (fasthttp, clientes HTTP, driver Mongo); no son mediciones.
