@@ -36,7 +36,7 @@ services:
     environment:
       EXTRACTION_URL: ${EXTRACTION_URL:-http://traefik:8090}
       PERSISTENCE_URL: ${PERSISTENCE_URL:-http://persistence:8002}
-      MAX_FILE_SIZE_MB: "${MAX_FILE_SIZE_MB:-50}"
+      MAX_FILE_SIZE_MB: "${MAX_FILE_SIZE_MB:-16}"
     deploy:
       resources:
         limits: # tope del TP
