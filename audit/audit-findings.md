@@ -1,448 +1,495 @@
 # Audit Findings — PDF Extractext
 
-Registro de hallazgos de la auditoría. Cada hallazgo usa la plantilla de 16 campos.
-Taxonomía obligatoria: `[VERIFICADO-CÓDIGO]`, `[VERIFICADO-PRUEBA]`, `[DOCUMENTADO-NO-VERIFICADO]`, `[HIPÓTESIS]`, `[RECOMENDACIÓN]`, `[DECISIÓN-PENDIENTE]`.
-
-## Plantilla de hallazgo (16 campos)
-
-1. **ID** (`FIND-XXX`)
-2. **Título**
-3. **Etapa de detección**
-4. **Categoría** (contrato / arquitectura / configuración / documentación / rendimiento / testing / seguridad)
-5. **Severidad** (Alta / Media / Baja)
-6. **Repositorio**
-7. **Ubicación** (`ruta:archivo:línea`)
-8. **Descripción**
-9. **Evidencia**
-10. **Etiqueta de taxonomía**
-11. **Impacto**
-12. **Condiciones de descubrimiento**
-13. **Causa raíz asociada** (`RC-XX` o "sin asignar")
-14. **Acción recomendada** (solo recomendación; la auditoría NO corrige)
-15. **Estado** (Abierto / En análisis / Cerrado)
-16. **Restricciones / notas**
+Registro de hallazgos. Plantilla de 16 campos:
+`ID`, `Título`, `Etapa`, `Categoría`, `Severidad`, `Repositorio`, `Ubicación`,
+`Descripción`, `Evidencia`, `Taxonomía`, `Impacto`, `Descubrimiento`,
+`Causa raíz`, `Acción recomendada`, `Estado`, `Restricciones`.
+Taxonomía: `[VERIFICADO-CÓDIGO]`, `[VERIFICADO-PRUEBA]`, `[DOCUMENTADO-NO-VERIFICADO]`, `[HIPÓTESIS]`, `[RECOMENDACIÓN]`, `[DECISIÓN-PENDIENTE]`.
 
 ---
 
 ## Causas Raíz (`RC-XX`)
 
-Se derivan de los hallazgos a medida que avanzan las etapas. Todavía sin asignar formalmente:
-
-| ID | Causa raíz propuesta | Hallazgos asociados | Estado | Etiqueta |
+| ID | Causa raíz | Hallazgos | Estado | Etiqueta |
 |---|---|---|---|---|
-| `RC-001` | El conjunto oficial de PDFs nunca se commiteó (excluido por `.gitignore`) y el comentario del `.gitignore`/README quedó desalineado con el estado real del repo. | `FIND-001`, `FIND-002` | **Resuelta** (2026-10-18): PDFs versionados y textos alineados | `[VERIFICADO-CÓDIGO]` |
-| `RC-002` | Los README de los tres servicios no se actualizaron tras la implementación de funcionalidad posterior al bootstrap (issues de extracción, persistencia y orquestación). | `FIND-004` | **Resuelta** (2026-10-18): READMEs actualizados | `[HIPÓTESIS]` |
-| `RC-003` | Coexisten dos suites de carga (una del repo Extractor y una de Infrastructure) sin definir cuál es la canónica del TP. | `FIND-003` | Propuesta | `[HIPÓTESIS]` |
-| `RC-004` | El informe técnico se redactó con datos de ejemplo/simulados en lugar de corridas reales y no se reemplazaron al obtener mediciones. | `FIND-008` | Propuesta | `[HIPÓTESIS]` |
-| `RC-005` | Los documentos de infraestructura (ADR, README, `.env.example`) evolucionaron sin una revisión de consistencia cruzada tras cada cambio de implementación. | `FIND-009`, `FIND-010` | Propuesta | `[HIPÓTESIS]` |
-| `RC-006` | El conjunto de PDFs de carga se armó copiando archivos sin verificar su procedencia/hash, dejando un duplicado del PDF pesado del extractor. | `FIND-011` | Propuesta | `[HIPÓTESIS]` |
-| `RC-007` | El cliente HTTP del API colapsa cualquier status de upstream en un error genérico (502/500), sin distinguir saturación (503), error de cliente (400/422) o fallo real. | `FIND-012`, `FIND-013` | `[RESUELTA - IMPLEMENTADA]` (commits extractor `627aecf`, persistence `2af0e62`, API `fb3d7c3`) | `[VERIFICADO-PRUEBA]` |
-| `RC-008` | El API genera request-id localmente pero `persistence_client.go` no lo envía como header: la correlación distribuida se rompe en el salto API→Persistence. | `FIND-014` | `[RESUELTA - IMPLEMENTADA]` (commit API `fb3d7c3`) | `[VERIFICADO-PRUEBA]` |
-| `RC-009` | El catálogo de códigos del extractor no define un code de saturación: el 503 reutiliza `INTERNAL_ERROR`. | `FIND-015` | `[RESUELTA - IMPLEMENTADA]` (commit extractor `627aecf`) | `[VERIFICADO-PRUEBA]` |
+| `RC-001` | Los PDFs oficiales nunca se versionaron (`.gitignore` desalineado con el README). | `FIND-001`, `FIND-002` | Resuelta (2026-10-18) | `[VERIFICADO-CÓDIGO]` |
+| `RC-002` | READMEs y ADRs no se actualizaron tras la implementación posterior al bootstrap. | `FIND-004`, `FIND-006` | Resuelta (2026-10-17/18) | `[VERIFICADO-CÓDIGO]` |
+| `RC-003` | Dos suites de carga sin script canónico definido. | `FIND-003`, `FIND-007` | Abierta (perfiles al final del ciclo) | `[VERIFICADO-CÓDIGO]` |
+| `RC-004` | El informe técnico se redactó con datos simulados y no se reemplazaron. | `FIND-008` | Resuelta (2026-10-18) | `[VERIFICADO-CÓDIGO]` |
+| `RC-005` | ADR/README/`.env.example` evolucionaron sin revisión cruzada. | `FIND-009`, `FIND-010` | Resuelta (2026-10-18) | `[VERIFICADO-CÓDIGO]` |
+| `RC-006` | El corpus de carga se armó sin verificar procedencia/hash (duplicado del PDF pesado). | `FIND-011` | Abierta | `[VERIFICADO-CÓDIGO]` |
+| `RC-007` | El cliente HTTP del API colapsaba cualquier status de upstream en error genérico. | `FIND-012`, `FIND-013` | Resuelta (API `fb3d7c3`) | `[VERIFICADO-PRUEBA]` |
+| `RC-008` | `persistence_client.go` no enviaba `X-Request-ID`. | `FIND-014` | Resuelta (API `fb3d7c3`) | `[VERIFICADO-PRUEBA]` |
+| `RC-009` | El 503 de saturación reutilizaba el code `INTERNAL_ERROR`. | `FIND-015` | Resuelta (extractor `627aecf`) | `[VERIFICADO-PRUEBA]` |
+| `RC-010` | La reescritura a Markdown (`3d9df00`, 2026-10-17) cambió el coste del hot path sin re-medir ni revalidar Issue #9 / ADR 0002 (2026-10-07). | `FIND-016`, `FIND-021` | Resuelta (2026-10-19) | `[VERIFICADO-CÓDIGO]` + `[VERIFICADO-PRUEBA]` |
+| `RC-011` | La extracción CPU-bound se ejecuta como código síncrono dentro del endpoint `async def` (un solo event loop). | `FIND-017` | Resuelta (2026-10-19) | `[VERIFICADO-CÓDIGO]` + `[VERIFICADO-PRUEBA]` |
+| `RC-012` | El mapeo de errores de PyMuPDF solo cubre `FileDataError`/`EmptyFileError`; el resto cae en el `except Exception` genérico. | `FIND-018` | Resuelta (2026-10-19) | `[VERIFICADO-PRUEBA]` |
+| `RC-013` | El límite defensivo acota solo el tamaño de entrada: sin límite de expansión, páginas ni tiempo. | `FIND-019` | Parcial (2026-10-19): spool liberado; límites pendientes | `[VERIFICADO-CÓDIGO]` |
+| `RC-014` | El contrato exige `extracted_text == content`: el Markdown viaja dos veces. | `FIND-020` | Abierta (decisión de contrato) | `[VERIFICADO-PRUEBA]` |
+| `RC-015` | Los defaults de arranque del extractor nunca se alinearon con la decisión medida del ADR 0002 (1 worker). | `FIND-021` | Resuelta (2026-10-19) | `[VERIFICADO-CÓDIGO]` |
 
 ---
 
-## Hallazgos (`FIND-XXX`)
+## Hallazgos
 
 ### FIND-001
 
 | Campo | Valor |
 |---|---|
 | **ID** | `FIND-001` |
-| **Título** | Los 4 PDFs oficiales no estaban versionados: presentes en disco local pero excluidos por `.gitignore` |
-| **Etapa de detección** | Etapa 1 (re-verificado 2026-10-18) |
+| **Título** | Los 4 PDFs oficiales no estaban versionados (excluidos por `.gitignore`) |
+| **Etapa** | Etapa 1 (resuelto 2026-10-18) |
 | **Categoría** | testing / configuración |
 | **Severidad** | Alta (impedía reproducir la línea base desde un clon limpio) |
-| **Repositorio** | Workspace `Microservicios/` (los 4 repos) |
-| **Ubicación** | `pdf-extractext-infrastructure/tests/load/pdfs/` (4 PDFs) y `.gitignore` (regla `tests/load/pdfs/*.pdf`, ya eliminada). La ruta de la cátedra `tests/stress/pdfs` sigue sin existir en ningún repo. |
-| **Descripción** | Los 4 PDFs oficiales (`2020-Scrum-Guide-Spanish-Latin-South-American.pdf`, `Essential-Kanban-Condensed-Spanish.pdf`, `Filosofia Lean.pdf`, `scrum_manager_historias_usuario.pdf`) estaban presentes en `tests/load/pdfs/` pero **excluidos por `.gitignore`**, por lo que un clon limpio no los tenía y las corridas no eran reproducibles. **Resolución (2026-10-18, revisada):** el equipo decidió **versionarlos**. Se quitó la regla de `.gitignore` y los 4 PDFs se agregan al repo. La ruta del enunciado `tests/stress/pdfs` sigue sin existir (se usa `tests/load/pdfs`). |
-| **Evidencia** | - Estado previo: `git ls-files tests/load/pdfs` → solo `generate_fixtures.sh`; `git status --ignored` → los 4 `.pdf` como `!!`. <br> - Estado actual: `.gitignore` sin la regla `tests/load/pdfs/*.pdf`; los 4 `.pdf` agregados al índice. <br> - `find … -type d -name stress` → sin resultados. |
-| **Etiqueta de taxonomía** | `[VERIFICADO-CÓDIGO]` |
-| **Impacto** | Resuelto: un clon limpio contiene el conjunto de carga completo. |
-| **Condiciones de descubrimiento** | Re-verificación del filesystem y de `git ls-files`/`git status --ignored` (2026-10-18). |
-| **Causa raíz asociada** | `RC-001` |
-| **Acción recomendada** | Hecho: `.gitignore` actualizado y PDFs versionados. Queda por resolver la calidad del dato (`FIND-011`: uno de los PDFs está duplicado) y confirmar si `tests/stress/pdfs` (enunciado) designa el mismo conjunto (`ASK-002`). |
-| **Estado** | **`[RESUELTO - IMPLEMENTADO]`** (2026-10-18): PDFs versionados en `tests/load/pdfs/`. |
-| **Restricciones / notas** | No se regeneran ni se sustituyen por fixtures artificiales. `FIND-011` sigue abierto (contenido duplicado). |
-
----
+| **Repositorio** | Workspace (los 4 repos) |
+| **Ubicación** | `pdf-extractext-infrastructure/tests/load/pdfs/`; regla `tests/load/pdfs/*.pdf` de `.gitignore` (eliminada). `tests/stress/pdfs` del enunciado no existe en ningún repo. |
+| **Descripción** | Los 4 PDFs oficiales estaban en disco pero excluidos por `.gitignore`. Decisión del equipo: versionarlos. |
+| **Evidencia** | Antes: `git ls-files tests/load/pdfs` → solo `generate_fixtures.sh`. Ahora: regla eliminada y 4 `.pdf` en el índice. `find -type d -name stress` → sin resultados. |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | Resuelto: un clon limpio contiene el corpus de carga. |
+| **Descubrimiento** | Re-verificación de filesystem y `git ls-files` (2026-10-18). |
+| **Causa raíz** | `RC-001` |
+| **Acción** | Hecho. Pendiente calidad del dato (`FIND-011`) y confirmar `tests/stress/pdfs` (`ASK-002`). |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-18) |
+| **Restricciones** | No se sustituyen por fixtures artificiales. |
 
 ### FIND-002
 
 | Campo | Valor |
 |---|---|
 | **ID** | `FIND-002` |
-| **Título** | Contradicción documental: el `.gitignore` y el README afirmaban que los PDFs oficiales estaban versionados, pero el propio `.gitignore` los excluía |
-| **Etapa de detección** | Etapa 1 (resuelto 2026-10-18) |
+| **Título** | `.gitignore` y README se contradecían sobre el versionado de los PDFs |
+| **Etapa** | Etapa 1 (resuelto 2026-10-18) |
 | **Categoría** | documentación / configuración |
 | **Severidad** | Media |
 | **Repositorio** | `pdf-extractext-infrastructure` |
-| **Ubicación** | `.gitignore` (regla `tests/load/pdfs/*.pdf`, ya eliminada) y `README.md` (sección de pruebas de carga) |
-| **Descripción** | El comentario del `.gitignore` decía que los PDFs "ya están copiados en el repositorio" mientras la línea siguiente los ignoraba (`tests/load/pdfs/*.pdf`); el README afirmaba que el conjunto oficial era "Sin `generate_fixtures.sh`", dando a entender que estaba versionado. **Resolución (2026-10-18, revisada):** se eliminó la regla de `.gitignore` y el README declara que los PDFs **sí se versionan**; el registro de corridas (`docs/test-runs/`) sigue siendo local. |
-| **Evidencia** | - Estado previo: `.gitignore` (regla `tests/load/pdfs/*.pdf`), `README.md` (§Pruebas de carga). <br> - Estado actual: `.gitignore` sin la regla; `README.md` ("PDFs oficiales … SÍ se versionan"). |
-| **Etiqueta de taxonomía** | `[VERIFICADO-CÓDIGO]` |
-| **Impacto** | Bajo tras la corrección: el clon limpio ya incluye el conjunto de carga. |
-| **Condiciones de descubrimiento** | Contraste entre textos documentales y el listado/trackeo real del directorio. |
-| **Causa raíz asociada** | `RC-001` |
-| **Acción recomendada** | Resuelto por decisión del equipo (2026-10-18): versionar los PDFs y documentarlo. |
-| **Restricciones / notas** | Contradicción registrada también como `CON-001`/`CON-002` en `audit-decisions.md`. |
-
----
+| **Ubicación** | `.gitignore` (regla eliminada) y `README.md` (§Pruebas de carga) |
+| **Descripción** | El comentario del `.gitignore` decía que los PDFs ya estaban copiados mientras la línea siguiente los ignoraba; el README daba a entender lo mismo. Corregido: regla eliminada y README declara que **sí** se versionan; `docs/test-runs/` sigue siendo local. |
+| **Evidencia** | Antes: `.gitignore` + `README.md` §Pruebas de carga. Ahora: sin regla; README "PDFs oficiales … SÍ se versionan". |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | Bajo tras la corrección. |
+| **Descubrimiento** | Contraste entre documentación y trackeo real. |
+| **Causa raíz** | `RC-001` |
+| **Acción** | Hecho por decisión del equipo (2026-10-18). |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-18) |
+| **Restricciones** | También `CON-001`/`CON-002` en `audit-decisions.md`. |
 
 ### FIND-003
 
 | Campo | Valor |
 |---|---|
 | **ID** | `FIND-003` |
-| **Título** | `make load-k6` ejecuta un spike de 1 VU, no el spike de 100 VUs exigido por el TP; el script de 100 VUs (`k6-spike.js`) no está referenciado por el Makefile |
-| **Etapa de detección** | Etapa 1 |
+| **Título** | `make load-k6` ejecuta un spike de 1 VU, no el de 100 VUs del TP |
+| **Etapa** | Etapa 1 |
 | **Categoría** | rendimiento / configuración |
-| **Severidad** | **Alta** (la herramienta de ejecución no produce el perfil del TP) |
+| **Severidad** | Alta |
 | **Repositorio** | `pdf-extractext-infrastructure` |
-| **Ubicación** | `Makefile:57-58` → `tests/load/run_k6.sh:21` → `tests/load/spike_tests.js:8-12` (stages `target: 1`); el script de 100 VUs (`k6-spike.js`) fue **eliminado el 2026-10-18** sin haber estado referenciado nunca |
-| **Descripción** | El README (`README.md:75, 81-83`) documenta `make load-k6` como "spike: 10s→100 VUs, 20s, 10s→0". En la implementación real, `run_k6.sh` ejecuta `spike_tests.js`, cuyas stages suben a **1 VU** (`{ duration: '20s', target: 1 }`). **Decisión del equipo (2026-10-18):** `spike_tests.js` es el script canónico y `k6-spike.js` (perfil de 100 VUs con fixtures generados) fue **eliminado**; el perfil de 100 VUs se implementará en `spike_tests.js` al final del ciclo (junto con el rate de Vegeta), cuando se corrijan los perfiles de carga. Queda abierto hasta entonces. |
-| **Evidencia** | - `Makefile:57-58`: `load-k6: check` → `bash tests/load/run_k6.sh`. <br> - `run_k6.sh:21`: `k6 run --summary-export=… ${K6_ARGS:-} tests/load/spike_tests.js`. <br> - `spike_tests.js:9-11`: stages `target: 1`. <br> - `k6-spike.js` eliminado del repo el 2026-10-18 (git history conserva su perfil). <br> - Grep: `k6-spike.js` no aparece en `Makefile`, `run_k6.sh` ni README. |
-| **Etiqueta de taxonomía** | `[VERIFICADO-CÓDIGO]` |
-| **Impacto** | Ejecutar el benchmark tal como está cableado NO reproduce el escenario del TP (100 VUs); las métricas resultantes no serían comparables con la referencia (P50 1,88s, P90 7,83s, 25,35 req/s). |
-| **Condiciones de descubrimiento** | Lectura cruzada Makefile → run_k6.sh → scripts k6, contrastando con el perfil del enunciado. |
-| **Causa raíz asociada** | `RC-003` |
-| **Acción recomendada** | Resuelta la elección del canónico (`ASK-003`): implementar las stages 100 VUs en `spike_tests.js` al corregir los perfiles de carga. |
-| **Estado** | Abierto (perfil pendiente; `k6-spike.js` eliminado 2026-10-18) |
-| **Restricciones / notas** | Corrección de perfiles pospuesta por el equipo hasta la etapa final de benchmarks. |
-
----
+| **Ubicación** | `Makefile:57-58` → `tests/load/run_k6.sh:21` → `tests/load/spike_tests.js:8-12` (stages `target: 1`); `k6-spike.js` (100 VUs) eliminado el 2026-10-18. |
+| **Descripción** | El README describe "spike 10s→100 VUs" pero `spike_tests.js` sube a 1 VU. Decisión del equipo: `spike_tests.js` es el canónico; las stages de 100 VUs se implementan al final del ciclo. |
+| **Evidencia** | `run_k6.sh:21` ejecuta `spike_tests.js`; `spike_tests.js:9-11`: `target: 1`; `k6-spike.js` no referenciado (eliminado). |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | El benchmark cableado no reproduce el escenario del TP (100 VUs). |
+| **Descubrimiento** | Lectura cruzada Makefile → scripts k6 vs enunciado. |
+| **Causa raíz** | `RC-003` |
+| **Acción** | Implementar stages 100 VUs en `spike_tests.js` al corregir perfiles (`ASK-003` resuelta). |
+| **Estado** | Abierto (perfil pendiente) |
+| **Restricciones** | Corrección pospuesta a la etapa final de benchmarks. |
 
 ### FIND-004
 
 | Campo | Valor |
 |---|---|
 | **ID** | `FIND-004` |
-| **Título** | READMEs de API, Extraction y Persistence desactualizados respecto del código real |
-| **Etapa de detección** | Etapa 1 (resuelto 2026-10-18) |
+| **Título** | READMEs de API, Extraction y Persistence desactualizados frente al código |
+| **Etapa** | Etapa 1 (resuelto 2026-10-18) |
 | **Categoría** | documentación |
 | **Severidad** | Media |
 | **Repositorio** | `pdf-extractext-api`, `pdf-extractext-extractor`, `pdf-extractext-persistence` |
-| **Ubicación** | Ver evidencia por servicio |
-| **Descripción** | Los tres README describían un estado "bootstrap" que el código ya había superado: <br> **(a) API**: decía que `PERSISTENCE_URL` era "requisito muerto… ningún código la consume" (issue #6), que `/extract` estaba "no registrado aún" y que no había endpoints CRUD. <br> **(b) Extraction**: decía "bootstrap inicial… fase actual: recepción" y que la respuesta era `{filename, size}`. <br> **(c) Persistence**: decía "El CRUD y el repositorio se implementarán en etapas posteriores". **Resolución (2026-10-18):** los tres README se reescribieron/actualizaron al estado real (endpoints, contratos, variables de entorno y estructura). También se corrigió el comentario obsoleto de `pdf-extractext-api/.env.example` (`PERSISTENCE_URL` "aún sin consumo"). |
-| **Evidencia** | - API: `cmd/api/main.go:36-40` registra `/extract`, `/upload-pdf` y `/documents`; `internal/services/persistence_client.go` consume `PERSISTENCE_URL`. <br> - Extractor: `extraction.py` devuelve `{filename, extracted_text, checksum, content, page_count}`; `main.py` expone `/health` y `/readyz`. <br> - Persistence: `internal/api/router.go:26-37` registra CRUD + probes. <br> - READMEs actualizados en los tres repos. |
-| **Etiqueta de taxonomía** | `[VERIFICADO-CÓDIGO]` |
-| **Impacto** | Bajo tras la corrección: la documentación refleja el contrato real. |
-| **Condiciones de descubrimiento** | Comparación de READMEs vs `main.go`, `router.go` y `extraction.py`. |
-| **Causa raíz asociada** | `RC-002` |
-| **Acción recomendada** | Hecho (2026-10-18). Queda pendiente ampliar `pdf-extractext-api/docs/openapi.yaml` (hoy solo documenta `/` y `/upload-pdf`). |
-| **Estado** | **`[RESUELTO - IMPLEMENTADO]`** (2026-10-18): READMEs de API, Extraction y Persistence actualizados. |
-| **Restricciones / notas** | Cambios de solo documentación; no se tocó comportamiento. |
-
----
+| **Ubicación** | Los 3 README + comentario de `pdf-extractext-api/.env.example` |
+| **Descripción** | Describían un estado "bootstrap" superado: API negaba `/extract`, CRUD y consumo de `PERSISTENCE_URL`; Extraction declaraba respuesta `{filename, size}`; Persistence decía CRUD "por implementar". Reescritos al estado real. |
+| **Evidencia** | API registra los 3 grupos de rutas (`cmd/api/main.go:36-40`) y consume `PERSISTENCE_URL`; Extraction devuelve los 5 campos y expone probes; Persistence registra CRUD + probes (`router.go:26-37`). |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | Bajo tras la corrección. |
+| **Descubrimiento** | READMEs vs `main.go`/`router.go`/`extraction.py`. |
+| **Causa raíz** | `RC-002` |
+| **Acción** | Hecho. Pendiente ampliar `pdf-extractext-api/docs/openapi.yaml`. |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-18) |
+| **Restricciones** | Solo documentación. |
 
 ### FIND-005
 
 | Campo | Valor |
 |---|---|
 | **ID** | `FIND-005` |
-| **Título** | No existe conversión a Markdown en ningún servicio: `content` es texto plano de PyMuPDF |
-| **Etapa de detección** | Etapa 1 |
+| **Título** | No existía conversión a Markdown: `content` era texto plano de PyMuPDF |
+| **Etapa** | Etapa 1 |
 | **Categoría** | contrato |
-| **Severidad** | Media (potencial brecha funcional vs enunciado) |
-| **Repositorio** | `pdf-extractext-extractor` (+ traspaso en `pdf-extractext-api`) |
-| **Ubicación** | `pdf-extractext-extractor/src/pdf_extractext_extractor/domain/extractor.py:31-39`, `pdf-extractext-api/internal/api/extract.go:52-56` |
-| **Descripción** | El enunciado pide que `content` sea "convertido a Markdown cuando corresponda". La extracción real concatena `page.get_text()` de PyMuPDF (texto plano, sin estructura Markdown) y la API reenvía ese string tal cual en `{content, page_count}`. Búsqueda `markdown|Markdown` en el workspace: 0 resultados. El ADR D14 solo especifica `{"content": "...", "page_count": N}` sin mencionar Markdown. |
-| **Evidencia** | `domain/extractor.py:35`: `text = "".join(page.get_text() for page in document)`; grep negativo de `markdown` en los 4 repos. |
-| **Etiqueta de taxonomía** | `[VERIFICADO-CÓDIGO]` (ausencia de conversión) + `[DECISIÓN-PENDIENTE]` (qué espera la cátedra exactamente) |
-| **Impacto** | Si la cátedra exige Markdown real (negritas, tablas, encabezados), haría falta un cambio de comportamiento del extractor — que la auditoría solo puede recomendar, no implementar. |
-| **Condiciones de descubrimiento** | Lectura del dominio de extracción durante el inventario tecnológico. |
-| **Causa raíz asociada** | Sin asignar |
-| **Acción recomendada** | Resuelto por decisión del equipo: convertir a Markdown nativo en el extractor (`ASK-005`). |
-| **Estado** | **`[RESUELTO - IMPLEMENTADO]`** (2026-10-17) |
-| **Restricciones / notas** | Implementado sin librerías externas de ML/OCR; solo PyMuPDF nativo. |
-
-#### Implementación Realizada y Verificación
-
-**Archivos y rangos modificados**
-
-| Archivo | Cambio |
-|---|---|
-| `pdf-extractext-extractor/src/pdf_extractext_extractor/domain/extractor.py` | Reescrito: docstring (l.1-13); constantes `_PAGE_SEPARATOR`/`_BULLET_PREFIXES`/`_BOLD_FLAG` (l.28-30); `extract_pdf_data` ahora produce Markdown (l.41-65); `_page_to_markdown` (l.68-121); `_line_properties` (l.124-141); `_base_font_size` (l.144-158); `_heading_level` (l.161-176); `_bullet_content` (l.179-186) |
-| `pdf-extractext-extractor/src/pdf_extractext_extractor/extraction.py` | Docstring del contrato aclarado: `extracted_text == content` y ese string es Markdown (l.10-15). **Sin cambios de lógica ni de nombres de campo.** |
-| `pdf-extractext-extractor/tests/domain/conftest.py` | Nuevas fixtures `heading_pdf` (l.49), `bullet_list_pdf` (l.61), `two_paragraphs_pdf` (l.73) |
-| `pdf-extractext-extractor/tests/domain/test_extractor.py` | Nueva clase `TestMarkdownConversion` con 7 tests (l.128-176) |
-
-**Explicación técnica (algoritmo y recursos)**
-
-- La conversión usa exclusivamente `page.get_text("dict")` de PyMuPDF: no se añaden dependencias de ML/OCR ni se rasteriza a imagen.
-- **Base tipográfica** (`_base_font_size`): tamaño de fuente dominante de la página ponderado por cantidad de caracteres; en empate se elige el menor (cuerpo de texto).
-- **Encabezados** (`_heading_level`): se clasifica por *ratio* sobre la base → `#` ≥ 1,8×, `##` ≥ 1,5×, `###` ≥ 1,25×; y por **negrita** (bit `1<<4` de `span["flags"]`) cuando la línea es íntegramente negrita, ratio ≥ 1,05× y ≤ 12 palabras → `###`.
-- **Listas** (`_bullet_content`): líneas que empiezan con `• - * · ‣ ▪ ◦` se normalizan a `- contenido`.
-- **Párrafos**: las líneas se agrupan en un párrafo y se separan por `\n\n`; un salto vertical mayor que el tamaño de fuente base entre líneas se interpreta como nuevo párrafo.
-- **Páginas**: se separan con una regla horizontal consistente `\n\n---\n\n` (`_PAGE_SEPARATOR`); las páginas sin texto no generan separador, por lo que un PDF sin texto sigue devolviendo `""` (contrato preservado).
-- **Recursos**: complejidad temporal O(n) en cantidad de spans; memoria O(texto). El documento se abre/cierra con context manager (`with pymupdf.open(...)`), garantizando liberación de recursos nativos sin fugas, incluso ante excepciones.
-- **Contrato preservado**: el dominio sigue devolviendo `extracted_text`; `extraction.py:113-119` mantiene `extracted_text == content` y `page_count`, y la API sigue leyendo `content` (`extraction_client.go:18`). Nombres de campo 100% compatibles.
-
-**Comandos de prueba y resultado `[VERIFICADO-PRUEBA]`**
-
-```
-$ uv run pytest -q   (en pdf-extractext-extractor)
-70 passed, 1 xfailed, 2 warnings in 1.66s
-```
-
-Los 7 tests nuevos de `TestMarkdownConversion` verifican: encabezado por tamaño, cuerpo no promovido, viñetas como `- item`, ausencia de indentación, separación de párrafos, separación de páginas por `---` y PDF sin texto → `""`.
-
----
-
-### FIND-007
-
-| Campo | Valor |
-|---|---|
-| **ID** | `FIND-007` |
-| **Título** | `run_vegeta.sh` lanza el ataque a **1 req/s**, no a los 50 req/s documentados por el TP, el README y el ADR D11 |
-| **Etapa de detección** | Etapa 1 |
-| **Categoría** | rendimiento / configuración |
-| **Severidad** | **Alta** (el benchmark ejecutable no implementa el perfil del TP: 30 reqs en 30s vs 1.500 esperados) |
-| **Repositorio** | `pdf-extractext-infrastructure` |
-| **Ubicación** | `tests/load/vegeta/run_vegeta.sh:21` (`RATE="1/s"`) vs `:71` (`-rate="$RATE"`) y encabezado `:2` ("ataque Vegeta 50 req/s × 30s"); `README.md:76` ("50 req/s × 30s"); `architecture-decisions.md:71` (D11: "Vegeta 50 req/s x 30s") |
-| **Descripción** | El script declara `RATE="1/s"` y lo pasa directamente a `vegeta attack -rate="$RATE"`. Con `DURATION=30s`, eso produce ~30 requests, no los 1.500 del perfil del TP (50 req/s × 30s). El propio comentario del script, el README del repo y el ADR D11 documentan 50 req/s: la variable está hardcoded sin default sobreescribible desde el entorno (no es `RATE="${RATE:-1/s}"`). |
-| **Evidencia** | - `run_vegeta.sh:21`: `RATE="1/s"`. <br> - `run_vegeta.sh:71-72`: `vegeta attack -rate="$RATE" -duration="$DURATION" …`. <br> - Comentario del script `run_vegeta.sh:2` y README `:76` y D11 documentan 50 req/s. <br> - El resumen impreso (`:70`) usa `${RATE}` tal cual, por lo que una corrida real anunciaría explícitamente "1/s". |
-| **Etiqueta de taxonomía** | `[VERIFICADO-CÓDIGO]` |
-| **Impacto** | Cualquier corrida con el script actual NO es comparable con la referencia del TP (998 exitosas / 16,65 req/s efectivo / 501 timeouts en 1.500 reqs): con 1 req/s el sistema quedaría subcargado y los latencies/timeouts serían artificialmente bajos. |
-| **Condiciones de descubrimiento** | Contraste entre el comentario/README/ADR (50 req/s) y el valor efectivo de `RATE` durante la lectura completa del script para el inventario de benchmarks. |
-| **Causa raíz asociada** | `RC-003` |
-| **Acción recomendada** | **Decisión del equipo (2026-10-18):** el rate se corrige a `50/s` en la etapa final de benchmarks (`make load-vegeta` hoy corre a 1 req/s). |
-| **Estado** | Abierto (corrección diferida) |
-| **Restricciones / notas** | Prioridad del equipo: primero el funcionamiento correcto del sistema; las pruebas de carga (k6/Vegeta) quedan para el final junto con `FIND-003`. |
-
----
+| **Severidad** | Media (brecha funcional vs enunciado) |
+| **Repositorio** | `pdf-extractext-extractor` (+ `pdf-extractext-api`) |
+| **Ubicación** | `domain/extractor.py` (reescrito), `internal/api/extract.go:52-56` |
+| **Descripción** | El enunciado pide Markdown; se concatenaba `page.get_text()` plano. Decisión: convertir a Markdown nativo con PyMuPDF (sin ML/OCR): encabezados por tamaño/negrita, viñetas, párrafos y separador de página `\n\n---\n\n`. Contrato de campos intacto (`extracted_text == content`). |
+| **Evidencia** | Implementación 2026-10-17 (`3d9df00`): `_page_to_markdown`, `_line_properties`, `_base_font_size`, `_heading_level`, `_bullet_content` en `domain/extractor.py`; 7 tests `TestMarkdownConversion` en `tests/domain/test_extractor.py`; suite `70 passed, 1 xfailed`. |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` + `[VERIFICADO-PRUEBA]` |
+| **Impacto** | Brecha cerrada. |
+| **Descubrimiento** | Lectura del dominio durante el inventario tecnológico. |
+| **Causa raíz** | Sin asignar |
+| **Acción** | Hecho (`ASK-005`). |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-17) |
+| **Restricciones** | Solo PyMuPDF nativo. |
 
 ### FIND-006
 
 | Campo | Valor |
 |---|---|
 | **ID** | `FIND-006` |
-| **Título** | Deriva documental menor entre ADRs de Infrastructure y la implementación real (healthchecks D8, versiones de Mongo D7) |
-| **Etapa de detección** | Etapa 1 |
+| **Título** | Deriva entre ADRs de Infrastructure y la implementación (healthchecks D8, Mongo D7) |
+| **Etapa** | Etapa 1 (resuelto 2026-10-17) |
 | **Categoría** | documentación / configuración |
 | **Severidad** | Baja |
 | **Repositorio** | `pdf-extractext-infrastructure`, `pdf-extractext-persistence` |
-| **Ubicación** | `docs/architecture-decisions.md:53-56` (D8), `docker-compose.yml` (healthchecks reales), `persistence` tests de integración (`mongo:7.0`) |
-| **Descripción** | (a) D8 describe healthchecks "CMD-SHELL con `curl -f … /readyz`"; la implementación real usa `["CMD","/healthprobe"]` (binario) para api/persistence y `python3 -c urllib…/readyz` para extraction — coherente con imágenes distroless sin shell, pero el ADR no lo refleja. (b) D7 documenta que Persistence está fijado a `mongo:7.0` en tests de integración mientras el stack usa `mongo:8`; el ADR lo asume como coordinación pendiente ("comunicado al responsable") y sigue sin resolverse en el código. |
-| **Evidencia** | `docker-compose.yml:45-48, 93-98, 121-126`; `architecture-decisions.md:48-61`; `persistence/README.md:112` ("testcontainers levanta `mongo:7.0`"). |
-| **Etiqueta de taxonomía** | `[VERIFICADO-CÓDIGO]` + `[DOCUMENTADO-NO-VERIFICADO]` (no se ejecutaron los tests de integración) |
-| **Impacto** | Bajo: no afecta el funcionamiento del stack; sí afecta la trazabilidad de decisiones. |
-| **Condiciones de descubrimiento** | Lectura del ADR vs compose vs README de Persistence. |
-| **Causa raíz asociada** | `RC-002` (parcial) |
-| **Acción recomendada** | Resuelto por decisión del equipo: actualizar D8 al mecanismo real y alinear Persistence a `mongo:8` (`ASK-006`). |
-| **Estado** | **`[RESUELTO - IMPLEMENTADO]`** (2026-10-17) |
-| **Restricciones / notas** | Se conserva la implementación de healthchecks en código (aprobada por el equipo). |
+| **Ubicación** | `docs/architecture-decisions.md` (D7, D8), `docker-compose.yml`, `persistence/README.md` |
+| **Descripción** | D8 describía healthchecks `CMD-SHELL`+`curl` cuando se usa `/healthprobe` (distroless) y `python3 urllib` en Extraction; D7 asumía coordinación pendiente de Mongo y el README citaba `mongo:7.0` cuando el código ya usaba `mongo:8` (`mongoImage()`). Corregido: D8 reescrito con el mecanismo real, D7 cerrado y README alineado. |
+| **Evidencia** | `docker-compose.yml:45-48,93-98,121-126`; D8 (`architecture-decisions.md:53-72`); `internal/infra/mongo/client_integration_test.go:27-32`. Tests de integración no ejecutados: verificado `go vet -tags=integration ./...`. |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` + `[DOCUMENTADO-NO-VERIFICADO]` |
+| **Impacto** | Bajo. |
+| **Descubrimiento** | ADR vs compose vs README. |
+| **Causa raíz** | `RC-002` (parcial) |
+| **Acción** | Hecho (`ASK-006`). |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-17) |
+| **Restricciones** | Se conserva la implementación real de healthchecks. |
 
-#### Implementación Realizada y Verificación
+### FIND-007
 
-**Precisión sobre el estado real (hallazgo original vs código):** el hallazgo original afirmaba que los tests de integración de Persistence estaban "fijados en `mongo:7.0`". La inspección profunda confirmó que **el código de tests ya usaba `mongo:8`** mediante el helper `mongoImage()` (`internal/infra/mongo/client_integration_test.go:27-32`, sobreescribible con `MONGO_TEST_IMAGE`); la única referencia a `mongo:7.0` estaba en el **README del repo** (líneas 35 y 112). La corrección real fue, por tanto, documental + confirmación de que el código ya cumplía D7.
-
-**Archivos y rangos modificados**
-
-| Archivo | Cambio |
+| Campo | Valor |
 |---|---|
-| `pdf-extractext-infrastructure/docs/architecture-decisions.md` | **D8** reescrito (l.53-72): mecanismo real por servicio (`/healthprobe` en api/persistence, `python3 -c urllib … /readyz` en extraction, `mongosh ping` en Mongo), orden de arranque y justificación (distroless sin shell, sin `curl`); **D7** actualizado (l.48-52): coordinación marcada como resuelta |
-| `pdf-extractext-persistence/README.md` | `mongo:7.0` → `mongo:8` en el ejemplo local (l.35) y en la nota de tests de integración (l.112) |
-
-**Explicación técnica**
-
-- **D8 (healthchecks):** se aprueba mantener la implementación actual por ser técnicamente superior. En imágenes `distroless` (api, persistence) no hay shell ni `curl`; el healthcheck usa el binario estático `/healthprobe` compilado en el mismo build (menor peso y menor superficie de ataque). En Extraction, se usa la librería estándar de Python (`urllib.request`) ya presente en la imagen, apuntando a `/readyz`. MongoDB usa `mongosh … db.adminCommand('ping')`. El ADR ahora documenta fielmente cada mecanismo, el orden de dependencias y la decisión descartada (`CMD-SHELL` + `curl`).
-- **D7 (MongoDB):** se confirmó el pin del equipo a `mongo:8` tanto en el compose (`MONGO_IMAGE=mongo:8`) como en los tests de integración (`mongoImage()`), y se alineó la documentación del repo Persistence. El override `MONGO_TEST_IMAGE` se conserva para CPUs sin AVX.
-
-**Comandos de prueba y resultado `[VERIFICADO-PRUEBA]`**
-
-```
-$ go build ./...                                  (en pdf-extractext-persistence)
-BUILD OK
-$ go vet -tags=integration ./...                  (compila los tests de integración)
-VET (integration) OK
-$ go test ./...                                   (tests unitarios; los de integración requieren Docker y tag)
-ok  internal/api  ok  internal/config  ok  internal/domain
-ok  internal/infra/mongo  ok  tests/contract
-```
-
-Nota: los tests de integración **no se ejecutaron** (requieren Docker/testcontainers y son de carga de contenedor); se verificó su **compilación** con `-tags=integration`. `[DOCUMENTADO-NO-VERIFICADO]` para la ejecución efectiva.
-
----
+| **ID** | `FIND-007` |
+| **Título** | `run_vegeta.sh` ataca a 1 req/s en vez de los 50 req/s documentados |
+| **Etapa** | Etapa 1 |
+| **Categoría** | rendimiento / configuración |
+| **Severidad** | Alta (30 reqs en 30 s vs 1.500 esperados) |
+| **Repositorio** | `pdf-extractext-infrastructure` |
+| **Ubicación** | `tests/load/vegeta/run_vegeta.sh:21` (`RATE="1/s"`) vs `:71` (`-rate="$RATE"`); README `:76`; D11 `:71` |
+| **Descripción** | `RATE` está hardcoded a `1/s` (sin default sobreescribible), mientras script, README y ADR documentan 50 req/s. Decisión del equipo: corregir el rate a `50/s` en la etapa final. |
+| **Evidencia** | `run_vegeta.sh:21` `RATE="1/s"`; `:71-72` lo pasa a `vegeta attack`; README/D11 documentan 50 req/s. |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | Corridas no comparables con la referencia del TP (1.500 reqs, 501 timeouts). |
+| **Descubrimiento** | Contraste comentario/README/ADR vs valor de `RATE`. |
+| **Causa raíz** | `RC-003` |
+| **Acción** | Corregir a `50/s` en la etapa final de benchmarks. |
+| **Estado** | Abierto (corrección diferida) |
+| **Restricciones** | Prioridad: funcionamiento correcto primero. |
 
 ### FIND-008
 
 | Campo | Valor |
 |---|---|
 | **ID** | `FIND-008` |
-| **Título** | `docs/informe_tecnico.md` (versionado) presentaba métricas marcadas como "simulado" y archivos de corrida inexistentes |
-| **Etapa de detección** | Re-verificación 2026-10-18 |
+| **Título** | `docs/informe_tecnico.md` presentaba métricas marcadas como "simulado" |
+| **Etapa** | Re-verificación 2026-10-18 |
 | **Categoría** | documentación / rendimiento |
-| **Severidad** | **Alta** (un documento entregable afirmaba resultados no medidos) |
+| **Severidad** | Alta (documento entregable con resultados no medidos) |
 | **Repositorio** | `pdf-extractext-infrastructure` |
-| **Ubicación** | `docs/informe_tecnico.md:47-84` (sección "Comparativa de Métricas (Antes vs Después)") |
-| **Descripción** | La sección 4 del informe técnico comparaba 1 vs 5 réplicas con cifras concretas (p95 850→180 ms, throughput 12→55 req/s, 503 35%→2%, 500 5%→0.1%) cuyas "fuentes" estaban rotuladas como **"Archivo de Registro (simulado)"** y apuntaban a `docs/test-runs/20261007T100000Z-k6-1-replica.md` y `...-5-replicas.md`, que **no existen**. Ninguno de esos números provino de una corrida real. |
-| **Evidencia** | - `git ls-files docs/informe_tecnico.md` → versionado (commit `261d6ea`). <br> - El propio texto decía "Archivo de Registro (simulado)". <br> - `ls docs/test-runs/` → no contiene los archivos referenciados. |
-| **Etiqueta de taxonomía** | `[VERIFICADO-CÓDIGO]` |
-| **Impacto** | Riesgo alto: el informe se entrega como evidencia y podía inducir a conclusiones falsas sobre el escalado y el backpressure. |
-| **Condiciones de descubrimiento** | Revisión de huecos de la Etapa 1 (el informe no había sido auditado). |
-| **Causa raíz asociada** | `RC-004` |
-| **Acción recomendada** | Resuelto por decisión del equipo (2026-10-18): neutralizar las cifras simuladas. |
-| **Estado** | **`[RESUELTO - IMPLEMENTADO]`** (2026-10-18). Las cifras simuladas se reemplazaron por una sección honesta "pendiente de corridas válidas" con tablas vacías; el historial de git conserva la versión anterior. |
-| **Restricciones / notas** | No se inventaron métricas de reemplazo ni se usaron corridas de perfil incorrecto (ver `FIND-003`/`FIND-007`). |
-
----
+| **Ubicación** | `docs/informe_tecnico.md:47-84` |
+| **Descripción** | Comparativa 1 vs 5 réplicas (p95, throughput, 503/500%) con "fuentes" rotuladas "simulado" y archivos de corrida inexistentes. Reemplazada por sección "pendiente de corridas válidas". |
+| **Evidencia** | Texto decía "Archivo de Registro (simulado)"; `docs/test-runs/` no contiene los archivos citados. |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | Riesgo alto antes de corregir. |
+| **Descubrimiento** | Revisión de huecos de la Etapa 1. |
+| **Causa raíz** | `RC-004` |
+| **Acción** | Hecho (2026-10-18). |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-18) |
+| **Restricciones** | No se inventaron métricas de reemplazo. |
 
 ### FIND-009
 
 | Campo | Valor |
 |---|---|
 | **ID** | `FIND-009` |
-| **Título** | Deriva del ADR de Infrastructure: D9 (límites "solo en desarrollo") y D5 (faltaba `API_TAG`); `.env.example` referenciaba `docs/pending-decisions.md` (eliminado) |
-| **Etapa de detección** | Re-verificación 2026-10-18 |
+| **Título** | Deriva del ADR (D9 límites, D5 `API_TAG`) y referencia muerta en `.env.example` |
+| **Etapa** | Re-verificación 2026-10-18 |
 | **Categoría** | documentación / configuración |
 | **Severidad** | Baja |
 | **Repositorio** | `pdf-extractext-infrastructure` |
-| **Ubicación** | `docs/architecture-decisions.md` (D5, D9) y `.env.example:3` |
-| **Descripción** | (a) D9 afirmaba "Resto de servicios: sin límites en desarrollo local", pero `docker-compose.yml` define límites de CPU/mem en **los 5 servicios** (traefik 0.5/512M, api 1.0/512M, extraction 1.0/1G, persistence 1.0/512M, mongodb 1.0/1G). (b) D5 omitía `API_TAG`, ya presente en el compose y el `.env.example`. (c) `.env.example` citaba `docs/pending-decisions.md`, reemplazado por `docs/architecture-decisions.md`. |
-| **Evidencia** | - `docker-compose.yml` (`deploy.resources.limits` en los 5 servicios). <br> - `docs/architecture-decisions.md` D5/D9. <br> - `.env.example:3`. |
-| **Etiqueta de taxonomía** | `[VERIFICADO-CÓDIGO]` |
-| **Impacto** | Bajo: no afecta el runtime; sí la trazabilidad de decisiones. |
-| **Condiciones de descubrimiento** | Contraste ADR ↔ compose ↔ `.env.example` durante la re-verificación. |
-| **Causa raíz asociada** | `RC-005` |
-| **Acción recomendada** | Resuelto por decisión del equipo (2026-10-18): actualizar D9 con la tabla real, agregar `API_TAG` a D5 y corregir la referencia del `.env.example`. |
-| **Estado** | **`[RESUELTO - IMPLEMENTADO]`** (2026-10-18) |
-| **Restricciones / notas** | — |
-
----
+| **Ubicación** | `docs/architecture-decisions.md` (D5, D9); `.env.example:3` |
+| **Descripción** | D9 decía "sin límites en desarrollo" pero el compose limita los 5 servicios; D5 omitía `API_TAG`; `.env.example` citaba `docs/pending-decisions.md` (eliminado). Corregido. |
+| **Evidencia** | `docker-compose.yml` con `deploy.resources.limits` en los 5 servicios; D5/D9; `.env.example:3`. |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | Bajo. |
+| **Descubrimiento** | ADR ↔ compose ↔ `.env.example`. |
+| **Causa raíz** | `RC-005` |
+| **Acción** | Hecho (2026-10-18). |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-18) |
+| **Restricciones** | — |
 
 ### FIND-010
 
 | Campo | Valor |
 |---|---|
 | **ID** | `FIND-010` |
-| **Título** | README de Infrastructure desalineado (decía "14 checks" y no aclaraba que PDFs/corridas son locales); `record-run.sh` podía escribir una versión de Mongo espuria |
-| **Etapa de detección** | Re-verificación 2026-10-18 |
+| **Título** | README de Infrastructure desalineado (conteo de checks, artefactos locales) y `record-run.sh` con versión de Mongo espuria |
+| **Etapa** | Re-verificación 2026-10-18 |
 | **Categoría** | documentación / testing |
 | **Severidad** | Baja |
 | **Repositorio** | `pdf-extractext-infrastructure` |
-| **Ubicación** | `README.md:42`, `README.md` (§Pruebas de carga), `scripts/record-run.sh` (`mongo_version`) |
-| **Descripción** | (a) El README decía que `make smoke` verifica "14 checks" cuando `scripts/smoke.sh` tiene **15**. (b) No aclaraba que los PDFs oficiales y los registros de `docs/test-runs/` son locales (gitignoreados), lo que contradecía la expectativa de que las corridas quedan versionadas. (c) `mongo_version()` encadenaba la salida de `docker exec` con `awk` mediante una construcción condicional que, si el pipeline fallaba, podía emitir la versión **y** el texto "desconocida" a la vez; dos corridas registradas (`docs/test-runs/*.md`, locales) quedaron con el texto "desconocida" colado. |
-| **Evidencia** | - `scripts/smoke.sh` (checks 1–15). <br> - `README.md:42`. <br> - `docs/test-runs/20261016T214110Z-k6.md` y `...T231713Z-k6.md` (fila MongoDB con "desconocida"). |
-| **Etiqueta de taxonomía** | `[VERIFICADO-CÓDIGO]` |
-| **Impacto** | Bajo: confusión en conteo de checks y registros con campos mal renderizados. |
-| **Condiciones de descubrimiento** | Contraste README ↔ smoke.sh y lectura de los registros locales. |
-| **Causa raíz asociada** | `RC-005` |
-| **Acción recomendada** | Resuelto por decisión del equipo (2026-10-18): README corregido a 15 checks + aclaraciones de artefactos locales; `mongo_version()` robustecido. |
-| **Estado** | **`[RESUELTO - IMPLEMENTADO]`** (2026-10-18) |
-| **Restricciones / notas** | Los registros ya generados con "desconocida" son artefactos locales; no se reescriben. |
-
----
+| **Ubicación** | `README.md:42`, §Pruebas de carga; `scripts/record-run.sh` (`mongo_version`) |
+| **Descripción** | README decía "14 checks" (hay 15) y no aclaraba que PDFs y `docs/test-runs/` son locales; `mongo_version()` podía emitir versión y "desconocida" a la vez. Corregido y robustecido. |
+| **Evidencia** | `scripts/smoke.sh` (checks 1–15); registros locales con "desconocida". |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | Bajo. |
+| **Descubrimiento** | README ↔ smoke.sh y lectura de registros locales. |
+| **Causa raíz** | `RC-005` |
+| **Acción** | Hecho (2026-10-18). |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-18) |
+| **Restricciones** | Los registros ya generados no se reescriben. |
 
 ### FIND-011
 
 | Campo | Valor |
 |---|---|
 | **ID** | `FIND-011` |
-| **Título** | Uno de los 4 "PDFs oficiales" (`Essential-Kanban-Condensed-Spanish.pdf`) es una copia exacta de `heavy.292.pdf` del extractor |
-| **Etapa de detección** | Re-verificación 2026-10-18 |
+| **Título** | `Essential-Kanban-Condensed-Spanish.pdf` es copia exacta de `heavy.292.pdf` |
+| **Etapa** | Re-verificación 2026-10-18 |
 | **Categoría** | testing / rendimiento |
-| **Severidad** | **Alta** (invalida la premisa de rotación de 4 documentos distintos y distorsiona el benchmark) |
-| **Repositorio** | `pdf-extractext-infrastructure` (conjunto de datos) |
+| **Severidad** | Alta (invalida la rotación de 4 documentos distintos) |
+| **Repositorio** | `pdf-extractext-infrastructure` (datos) |
 | **Ubicación** | `tests/load/pdfs/Essential-Kanban-Condensed-Spanish.pdf` vs `pdf-extractext-extractor/tests/data/heavy.292.pdf` |
-| **Descripción** | Los dos archivos son **byte a byte idénticos**: tamaño 8.901.466 bytes y SHA-256 `257f73b908420ac5c78852fb8673beb683a8ca0c05d2e6a82b5e9629f6ad7be8` en ambos (`cmp -s` → sin diferencias). Es decir, el conjunto de carga no tiene 4 documentos oficiales distintos: uno de ellos (292 páginas, ~8,9 MB) es el PDF pesado del extractor, reetiquetado como documento Kanban. |
-| **Evidencia** | - `sha256sum` de ambos archivos → mismo hash. <br> - `cmp -s heavy.292.pdf Essential-Kanban-Condensed-Spanish.pdf` → idénticos. <br> - Tamaño `8901466` en ambos. |
-| **Etiqueta de taxonomía** | `[VERIFICADO-CÓDIGO]` |
-| **Impacto** | El perfil de Vegeta rota 4 targets pero dos apuntan al mismo contenido pesado, y ese contenido es el que explica latencias altas; la comparación con la referencia del TP (4 documentos reales) no es válida. También invalida cualquier supuesto de "distribución uniforme" entre 4 PDFs. |
-| **Condiciones de descubrimiento** | Cálculo de hashes de los 4 PDFs durante la re-verificación del benchmark. |
-| **Causa raíz asociada** | `RC-006` |
-| **Acción recomendada** | El equipo debe reemplazar `Essential-Kanban-Condensed-Spanish.pdf` por el documento oficial real y verificar los hashes de los 4 archivos (`ASK-009`). |
+| **Descripción** | Byte a byte idénticos: 8.901.466 bytes y SHA-256 `257f73b9…ad7be8` en ambos. El corpus no tiene 4 documentos distintos. |
+| **Evidencia** | `sha256sum` igual; `cmp -s` sin diferencias; mismo tamaño. |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | Dos de los 4 targets de Vegeta apuntan al mismo contenido pesado; comparación con la referencia del TP inválida. |
+| **Descubrimiento** | Hashes de los 4 PDFs durante la re-verificación. |
+| **Causa raíz** | `RC-006` |
+| **Acción** | Reemplazar por el documento oficial real y verificar hashes (`ASK-009`). |
 | **Estado** | Abierto |
-| **Restricciones / notas** | No se modificaron datos de prueba; solo se documentó el hallazgo. |
-
----
+| **Restricciones** | No se modificaron datos de prueba. |
 
 ### FIND-012
 
 | Campo | Valor |
 |---|---|
 | **ID** | `FIND-012` |
-| **Título** | El backpressure de Extraction (503 + `Retry-After`) llega al cliente como 502 genérico, sin header |
-| **Etapa de detección** | Verificación funcional 2026-10-18 |
+| **Título** | El 503 + `Retry-After` de Extraction llegaba al cliente como 502 genérico |
+| **Etapa** | Verificación funcional 2026-10-18 |
 | **Categoría** | contrato / configuración |
-| **Severidad** | **Media** (funciona, pero el cliente no puede distinguir saturación de fallo real) |
-| **Repositorio** | `pdf-extractext-api` (exige coordinación con Extraction) |
-| **Ubicación** | `internal/services/extraction_client.go:72-73` (cualquier status ≠ 200 → error genérico) · `internal/api/extract.go:47` y `internal/api/upload_pdf.go:65,73` (→ 502) |
-| **Descripción** | Extraction, al superar `MAX_CONCURRENCY`, responde **503 + `Retry-After`** (patrón fail-fast, ADR D10). El cliente del API descarta el status y el header del upstream y los handlers responden **502** genérico: el cliente final nunca ve el backpressure controlado que exige la consigna (503/429 con espera informada). Además, `/upload-pdf` tiene timeout de 30 s, por lo que bajo saturación el cliente percibe 502 en lugar de un rechazo inmediato. |
-| **Evidencia** | - Directo contra Extraction (12 `curl` paralelos a `http://extraction:8001/extract` desde la red `services`): respuestas **503** con header `Retry-After`. <br> - Vía dominio público (14 `curl` paralelos a `https://pdf-extractext.localhost/extract`): **3×200 + 11×502**, y ningún header `Retry-After` en las respuestas. <br> - `extraction_client.go:72-73`: `if resp.StatusCode != http.StatusOK { return nil, … }` (no propaga ni el código ni el header). <br> - (Etapa 2) Un PDF corrupto produce **422** `INVALID_PDF_CONTENT` en el extractor y la API responde **502**: el enmascaramiento cubre cualquier status, no solo el 503. |
-| **Etiqueta de taxonomía** | `[VERIFICADO-PRUEBA]` |
-| **Impacto** | El cliente (y las herramientas de carga) trata saturación como fallo: reintenta en el momento y empeora la cola. Se pierde la señal de "esperá N segundos" que es el núcleo del manejo de congestión del TP. |
-| **Condiciones de descubrimiento** | Prueba de saturación manual con `curl` concurrente durante la verificación funcional del sistema (2026-10-18). |
-| **Causa raíz asociada** | `RC-007` |
-| **Acción recomendada** | Propagar el 503 y el header `Retry-After` del extractor en `/extract` y `/upload-pdf` (y documentarlos en el README/OpenAPI). Requiere decisión y cambio de comportamiento en el API. |
-| **Estado** | `[RESUELTO - IMPLEMENTADO]` (commit API `fb3d7c3`, 2026-10-19) — los 4xx y el 503 del extractor se propagan tal cual (503 conserva `Retry-After`); 502 solo para fallos de red/timeout o 500 del upstream. Verificado en runtime (curas en vivo, C-21). |
-| **Restricciones / notas** | ~~Prioridad: primero el funcionamiento correcto; corrección diferida.~~ Resuelto en la fase de correcciones aprobada. Las pruebas de carga (k6/Vegeta) quedan para la etapa final (`FIND-003`, `FIND-007`). |
-
----
+| **Severidad** | Media |
+| **Repositorio** | `pdf-extractext-api` (+ Extraction) |
+| **Ubicación** | `internal/services/extraction_client.go:72-73`; `internal/api/extract.go:47`; `internal/api/upload_pdf.go:65,73` |
+| **Descripción** | El cliente del API descartaba status y header del upstream y los handlers respondían 502: el cliente final nunca veía el backpressure controlado. También afectaba a los 422. |
+| **Evidencia** | Directo a Extraction (12 `curl`): 503 + `Retry-After`. Vía Traefik (14 `curl`): 3×200 + 11×502 sin header. PDF corrupto: 422 en extractor → 502 en el API. |
+| **Taxonomía** | `[VERIFICADO-PRUEBA]` |
+| **Impacto** | El cliente trata saturación como fallo y empeora la cola. |
+| **Descubrimiento** | Prueba de saturación con `curl` concurrente (2026-10-18). |
+| **Causa raíz** | `RC-007` |
+| **Acción** | Propagar 4xx/503 (con `Retry-After`) y reservar 502 a red/timeout/500 del upstream. |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (API `fb3d7c3`, 2026-10-19) |
+| **Restricciones** | Resuelto en la fase de correcciones aprobada. |
 
 ### FIND-013
 
 | Campo | Valor |
 |---|---|
 | **ID** | `FIND-013` |
-| **Título** | Un id malformado en `GET /documents/{id}` responde **500** en la API (Persistence devuelve 400) |
-| **Etapa de detección** | Etapa 2 — auditoría funcional (2026-10-18) |
+| **Título** | Un id malformado en `GET /documents/{id}` respondía 500 en el API |
+| **Etapa** | Etapa 2 (2026-10-18) |
 | **Categoría** | contrato / errores |
-| **Severidad** | **Media** (un error de cliente se reporta como fallo interno; contamina el monitoreo con 5xx) |
+| **Severidad** | Media |
 | **Repositorio** | `pdf-extractext-api` |
-| **Ubicación** | `internal/services/persistence_client.go:106-111` (`FindByID` solo traduce 404/200; cualquier otro status → error genérico) · `internal/api/documents.go:52-58` |
-| **Descripción** | Persistence valida el formato del id y responde 400 `INVALID_REQUEST` (`pdf-extractext-persistence/internal/api/documents.go:129-132`). El cliente de la API no propaga ese 400 y el `CustomErrorHandler` cae al fallback 500 `INTERNAL_ERROR`. Misma causa raíz que `FIND-012` (RC-007), pero en el salto API→Persistence. |
-| **Evidencia** | `curl https://pdf-extractext.localhost/documents/xyz` → **500** `{"code":"INTERNAL_ERROR","message":"error interno del servidor"}` (runtime 2026-10-18); el id válido inexistente (`aaaaaaaaaaaaaaaaaaaaaaaa`) → **404** correcto. |
-| **Etiquetas de taxonomía** | `[VERIFICADO-PRUEBA]` |
-| **Impacto** | El cliente corrige mal su petición (espera 500 y no reintenta con id válido); los tableros de error cuentan 5xx por tráfico inválido. |
-| **Condiciones de descubrimiento** | Trazado del CRUD de `/documents` en la Etapa 2 con `curl` sobre el stack real. |
-| **Causa raíz asociada** | `RC-007` |
-| **Acción recomendada** | Validar el formato del id en la API o mapear 4xx del upstream a su status original (junto con la corrección de `FIND-012`). |
-| **Estado** | `[RESUELTO - IMPLEMENTADO]` (commit API `fb3d7c3`, 2026-10-19) — id hex-24 validado en la API (GET/PATCH/DELETE) y el `UpstreamError` re-emite el 400 de Persistence sin convertirlo en 500. Verificado en runtime (C-21). |
-| **Restricciones / notas** | ~~Corrección diferida.~~ Resuelto en la fase de correcciones aprobada. |
-
----
+| **Ubicación** | `internal/services/persistence_client.go:106-111`; `internal/api/documents.go:52-58` |
+| **Descripción** | Persistence devuelve 400 `INVALID_REQUEST`; el cliente no lo propagaba y caía al 500 `INTERNAL_ERROR`. |
+| **Evidencia** | `curl .../documents/xyz` → 500; id válido inexistente → 404 correcto (runtime 2026-10-18). |
+| **Taxonomía** | `[VERIFICADO-PRUEBA]` |
+| **Impacto** | Un error de cliente se reporta como fallo interno. |
+| **Descubrimiento** | Trazado del CRUD en la Etapa 2. |
+| **Causa raíz** | `RC-007` |
+| **Acción** | Validar el id en la API y re-emitir 4xx del upstream. |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (API `fb3d7c3`, 2026-10-19) |
+| **Restricciones** | Resuelto en la fase de correcciones aprobada. |
 
 ### FIND-014
 
 | Campo | Valor |
 |---|---|
 | **ID** | `FIND-014` |
-| **Título** | La API no propaga `X-Request-ID` a Persistence: se rompe la correlación distribuida |
-| **Etapa de detección** | Etapa 2 — auditoría funcional (2026-10-18) |
+| **Título** | La API no propagaba `X-Request-ID` a Persistence |
+| **Etapa** | Etapa 2 (2026-10-18) |
 | **Categoría** | observabilidad / trazabilidad |
-| **Severidad** | **Baja** (no afecta funcionalidad; dificulta el diagnóstico end-to-end) |
+| **Severidad** | Baja |
 | **Repositorio** | `pdf-extractext-api` |
-| **Ubicación** | `internal/services/persistence_client.go` (ninguno de los 5 métodos setea `X-Request-ID`) vs `internal/services/extraction_client.go:62-64` (sí lo propaga) y `pdf-extractext-persistence/internal/api/middleware.go:32-49` (acepta y usa el header) |
-| **Descripción** | El middleware de la API acepta/genera `X-Request-ID` y lo reenvía a Extraction, pero el cliente de Persistence nunca lo envía; Persistence genera entonces un UUID propio. Dos request-ids distintos describen la misma petición en los logs del sistema. |
-| **Evidencia** | `curl https://pdf-extractext.localhost/documents -H 'X-Request-ID: etapa2-audit-001'` → 200, y `docker logs pdf-extractext-persistence-1` no contiene `etapa2-audit-001` (generó otro UUID) — runtime 2026-10-18. |
-| **Etiquetas de taxonomía** | `[VERIFICADO-PRUEBA]` |
-| **Impacto** | No se puede rastrear una petición completa en los logs de los 4 servicios con un solo id. |
-| **Condiciones de descubrimiento** | Verificación de correlación entre servicios en la Etapa 2. |
-| **Causa raíz asociada** | `RC-008` |
-| **Acción recomendada** | Setear `X-Request-ID` en los 5 métodos de `persistence_client.go`, igual que hace el cliente de Extraction. |
-| **Estado** | `[RESUELTO - IMPLEMENTADO]` (commit API `fb3d7c3`, 2026-10-19) — los 5 métodos del cliente de Persistence envían `X-Request-ID` (helper `newRequest`). Verificado en runtime (C-21). |
-| **Restricciones / notas** | ~~Sin corrección en esta etapa.~~ Resuelto en la fase de correcciones aprobada. |
-
----
+| **Ubicación** | `internal/services/persistence_client.go` vs `extraction_client.go:62-64` y `persistence/internal/api/middleware.go:32-49` |
+| **Descripción** | El cliente de Persistence nunca enviaba el header; Persistence generaba otro UUID y la correlación se rompía. |
+| **Evidencia** | `curl ... -H 'X-Request-ID: etapa2-audit-001'` → los logs de Persistence no contienen ese id (runtime 2026-10-18). |
+| **Taxonomía** | `[VERIFICADO-PRUEBA]` |
+| **Impacto** | No se puede rastrear una petición en los 4 servicios con un id. |
+| **Descubrimiento** | Verificación de correlación en la Etapa 2. |
+| **Causa raíz** | `RC-008` |
+| **Acción** | Enviar `X-Request-ID` en los 5 métodos del cliente de Persistence. |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (API `fb3d7c3`, 2026-10-19) |
+| **Restricciones** | Resuelto en la fase de correcciones aprobada. |
 
 ### FIND-015
 
 | Campo | Valor |
 |---|---|
 | **ID** | `FIND-015` |
-| **Título** | El 503 de saturación del extractor declara `code: "INTERNAL_ERROR"` |
-| **Etapa de detección** | Etapa 2 — auditoría funcional (2026-10-18) |
+| **Título** | El 503 de saturación declaraba `code: "INTERNAL_ERROR"` |
+| **Etapa** | Etapa 2 (2026-10-18) |
 | **Categoría** | contrato / errores |
-| **Severidad** | **Baja** (el status y `Retry-After` son correctos; solo el code del envelope es semánticamente erróneo) |
+| **Severidad** | Baja |
 | **Repositorio** | `pdf-extractext-extractor` |
-| **Ubicación** | `src/pdf_extractext_extractor/admission.py:45-51` (503 con `code: "INTERNAL_ERROR"`) · `errors.py:4-9` (catálogo sin entrada de saturación) |
-| **Descripción** | El catálogo de errores define 400/422/500 pero no un code para saturación; el middleware de admisión reutiliza `INTERNAL_ERROR` en el 503. Un cliente que decida por `code` (y no por status) tratará una condición transitorio como fallo interno permanente. |
-| **Evidencia** | `[VERIFICADO-CÓDIGO]` `admission.py:45-51` devuelve `{"code":"INTERNAL_ERROR","message":"Servicio saturado…"}` con header `Retry-After`. |
-| **Etiquetas de taxonomía** | `[VERIFICADO-CÓDIGO]` |
-| **Impacto** | Semántica de error engañosa en el contrato del extractor; el envelope contradice al status. |
-| **Condiciones de descubrimiento** | Revisión de los contratos de error de los 3 servicios en la Etapa 2. |
-| **Causa raíz asociada** | `RC-009` |
-| **Acción recomendada** | Añadir un code dedicado (p. ej. `SERVICE_OVERLOADED`) al catálogo del extractor y usarlo en el 503. |
-| **Estado** | `[RESUELTO - IMPLEMENTADO]` (commit extractor `627aecf`, 2026-10-19) — catálogo `PROBLEM_CATALOG` con `SERVICE_OVERLOADED` y 503 en `application/problem+json` (RFC 9457). Verificado en runtime (C-21). |
-| **Restricciones / notas** | ~~Sin corrección en esta etapa.~~ Resuelto junto con la adopción de RFC 9457 (`CON-018`). |
+| **Ubicación** | `admission.py:45-51`; `errors.py` (catálogo sin entrada de saturación) |
+| **Descripción** | El catálogo no tenía code de saturación y el 503 reutilizaba `INTERNAL_ERROR`; un cliente que decide por `code` trataba una condición transitoria como fallo permanente. |
+| **Evidencia** | `admission.py:45-51` devolvía `INTERNAL_ERROR` con header `Retry-After`. |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | Semántica de error engañosa. |
+| **Descubrimiento** | Revisión de contratos de error (Etapa 2). |
+| **Causa raíz** | `RC-009` |
+| **Acción** | Code dedicado `SERVICE_OVERLOADED` en el catálogo. |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (extractor `627aecf`, 2026-10-19) |
+| **Restricciones** | Resuelto junto con RFC 9457 (`CON-018`). |
+
+### FIND-016
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-016` |
+| **Título** | `page.get_text("dict")` decodificaba las imágenes embebidas que luego se descartaban |
+| **Etapa** | Etapa 3A (2026-10-19) |
+| **Categoría** | rendimiento — cuello de botella verificado |
+| **Severidad** | Alta |
+| **Repositorio** | `pdf-extractext-extractor` |
+| **Ubicación** | `domain/extractor.py:70` (`get_text("dict")` sin `flags`, incluía `TEXT_PRESERVE_IMAGES`) y `:83-84` (descarte de bloques `type != 0`) |
+| **Descripción** | Los flags por defecto (`TEXTFLAGS_DICT`) hacían que MuPDF decodificara las imágenes de cada página (bloques `type != 0`) que el conversor descarta siempre. Coste alto sin efecto en la salida. |
+| **Evidencia** | A/B en el host de auditoría (mismo PDF, misma función): heavy/90 pág 6,276 s → 0,438 s (14,3×); historias 4,4×; Lean 1,5×; Scrum 1,0×. Markdown **idéntico byte a byte en los 5 PDFs**. Desglose heavy: abrir/recorrer 0,007 s, `get_text()` plano 0,19–0,34 s, `get_text("dict")` 6,0–6,7 s, conversión ≈0,1 s. |
+| **Taxonomía** | `[VERIFICADO-PRUEBA]` + `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | Coste CPU por request multiplicado (≈4×–14× según imágenes) con salida idéntica; invalida las cifras absolutas de Issue #9/ADR 0002 (previas al Markdown). |
+| **Descubrimiento** | Etapa 3A, bloque de algoritmo/coste del hot path. |
+| **Causa raíz** | `RC-010` |
+| **Acción** | `TEXTFLAGS_DICT & ~TEXT_PRESERVE_IMAGES`. |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-19) — `domain/extractor.py:68-70`; valida la suite de dominio (Markdown esperado) + `TestImageBlocksAreSkipped` (spy de los flags). |
+| **Restricciones** | Los tiempos absolutos no son comparables con Issue #9 (specs del host desconocidas): solo ratios intra-máquina. |
+
+### FIND-017
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-017` |
+| **Título** | La extracción CPU-bound corría en el event loop: bloqueaba `/health` y la admisión |
+| **Etapa** | Etapa 3A (2026-10-19) |
+| **Categoría** | arquitectura / concurrencia — cuello de botella verificado |
+| **Severidad** | Alta |
+| **Repositorio** | `pdf-extractext-extractor` |
+| **Ubicación** | `extraction.py:112` (llamada síncrona dentro de `async def extract`); `admission.py:42-58`; `gunicorn.conf.py:8` (backlog 64) |
+| **Descripción** | Sin offload, mientras PyMuPDF trabajaba el worker no atendía nada: concurrencia efectiva 1, `/health` y `/readyz` en cola, y el 503 solo alcanzaba a las peticiones que llegaban con el loop libre (las del backlog esperaban en serie). |
+| **Evidencia** | `/health` retrasado ~11,6 s durante una extracción in-process; 3 solicitudes simultáneas → 1×200 + 2×503; petición lanzada con el loop bloqueado → 200 a los 7,46 s (serializada) en vez de 503. Grep: sin `threading`/`to_thread`/`ProcessPool` en `src/`. |
+| **Taxonomía** | `[VERIFICADO-PRUEBA]` + `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | Sin paralelismo real, backpressure parcial (la mayoría del tráfico saturado esperaba y podía superar el timeout de 30 s del API → 502), healthchecks en riesgo y trabajos no cancelables. |
+| **Descubrimiento** | Etapa 3A, bloque de concurrencia/workers. |
+| **Causa raíz** | `RC-011` (complementa `FIND-012`) |
+| **Acción** | Delegar a `run_in_threadpool` manteniendo el semáforo como límite de slots. |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-19) — `extraction.py:15,93-94`; `tests/api/test_concurrency.py` (2 tests: `/health` responde y el 503 es inmediato con la extracción en curso; ambos fallan si se revierte el fix). |
+| **Restricciones** | Si PyMuPDF no libera el GIL, el paralelismo CPU sigue limitado (pendiente de verificar en la etapa de benchmarks). |
+
+### FIND-018
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-018` |
+| **Título** | Un PDF protegido con contraseña respondía 500 (y 502 vía API) en vez de 4xx |
+| **Etapa** | Etapa 3A (2026-10-19) |
+| **Categoría** | contrato / errores |
+| **Severidad** | Media |
+| **Repositorio** | `pdf-extractext-extractor` (+ `pdf-extractext-api`) |
+| **Ubicación** | `domain/extractor.py:55` (`except` solo cubre `FileDataError`/`EmptyFileError`); el `ValueError: document closed or encrypted` caía en el `except Exception` |
+| **Descripción** | `pymupdf.open` acepta el PDF cifrado y el fallo aparece al recorrer páginas; el catch específico no lo cubría → `InternalProcessingError` → 500, y el API lo traducía a 502. Un PDF con contraseña es un 4xx de cliente. |
+| **Evidencia** | PDF generado con `PDF_ENCRYPT_AES_256` (user_pw) → `InternalProcessingError` → 500 (`audit_3a_probe`); sin test previo de cifrado (grep `encrypt/password/needs_pass` en `tests/` → 0). |
+| **Taxonomía** | `[VERIFICADO-PRUEBA]` |
+| **Impacto** | Contamina los 5xx con tráfico inválido; el usuario no recibe indicación accionable. |
+| **Descubrimiento** | Etapa 3A, matriz de PDFs inválidos. |
+| **Causa raíz** | `RC-012` |
+| **Acción** | Detectar `document.needs_pass` y mapearlo a 422 `INVALID_PDF_CONTENT` (sin code nuevo). |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-19) — `domain/extractor.py:49-51`; tests `TestEncryptedPdf` (dominio) y `test_encrypted_pdf_maps_to_422` (API). |
+| **Restricciones** | Solo verificado AES-256 con contraseña de usuario; otros esquemas quedan como hueco. |
+
+### FIND-019
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-019` |
+| **Título** | Sin límite de expansión/páginas/tiempo y ≥2 copias del binario en RAM → riesgo de OOMKill |
+| **Etapa** | Etapa 3A (2026-10-19) |
+| **Categoría** | rendimiento / robustez |
+| **Severidad** | Media |
+| **Repositorio** | `pdf-extractext-extractor` |
+| **Ubicación** | `config.py:14` (solo `max_upload_bytes`); `extraction.py` (recepción 100 % en memoria, spool nunca cerrado); Compose `memory: 1G` |
+| **Descripción** | El límite defensivo acota el input comprimido, no la expansión de PyMuPDF; tampoco hay tope de páginas ni de tiempo, y durante la fase CPU coexisten el spool y `pdf_bytes`. Lo que sí es correcto: cero archivos temporales y cierre garantizado del documento. |
+| **Evidencia** | Pico Python 20,7 MiB para 8,49 MiB de entrada (~2,4×), 1,25 MiB al final; `pymupdf/__init__.py:2979` abre el stream sin copia; OOM previo documentado en `performance-issue-9.md:22-25`. |
+| **Taxonomía** | `[VERIFICADO-PRUEBA]` + `[VERIFICADO-CÓDIGO]` + `[HIPÓTESIS]` (OOM con PDF bomba) |
+| **Impacto** | Un PDF que expanda mucho puede tumbar la réplica (1 worker) con 1 GiB de límite y provocar 502 masivos. |
+| **Descubrimiento** | Etapa 3A, bloques de memoria y archivos inválidos. |
+| **Causa raíz** | `RC-013` |
+| **Acción** | Liberar el spool con `await upload.close()` (hecho). Pendiente: límites de páginas/tiempo y techo de memoria (decisión del equipo). |
+| **Estado** | **Parcial** (2026-10-19) — `extraction.py:87-89` cierra el `UploadFile` tras leer; los límites de expansión/páginas/tiempo siguen abiertos. |
+| **Restricciones** | No se probaron PDFs bomba (prueba destructiva). Sin `/proc`/`docker stats`, el RSS real no es medible en esta etapa. |
+
+### FIND-020
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-020` |
+| **Título** | La respuesta duplica el Markdown (`extracted_text` == `content`) |
+| **Etapa** | Etapa 3A (2026-10-19) |
+| **Categoría** | contrato / rendimiento |
+| **Severidad** | Baja |
+| **Repositorio** | `pdf-extractext-extractor` + `pdf-extractext-api` |
+| **Ubicación** | `extraction.py:96-99` (ambas claves con el mismo string); `internal/services/extraction_client.go:15-16`; `internal/api/extract.go:47-48` (solo publica `content`) |
+| **Descripción** | El contrato fija `extracted_text == content`: el Markdown viaja dos veces y en `/extract` un campo nunca se consume. |
+| **Evidencia** | Markdown 121,3 KiB → cuerpo de respuesta 0,242 MiB (≈2×). |
+| **Taxonomía** | `[VERIFICADO-PRUEBA]` + `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | ~2× de payload y de serialización; proporcional al documento. |
+| **Descubrimiento** | Medición de memoria/respuesta en la Etapa 3A. |
+| **Causa raíz** | `RC-014` |
+| **Acción** | Reabrir la decisión D14/INT-01 (un solo campo o campos a demanda). |
+| **Estado** | Abierto — `[DECISIÓN-PENDIENTE]` |
+| **Restricciones** | No se modifica el contrato acordado. |
+
+### FIND-021
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-021` |
+| **Título** | Los defaults de workers seguían en 4 (medido como peor) mientras ADR 0002 fija 1 |
+| **Etapa** | Etapa 3A (2026-10-19) |
+| **Categoría** | configuración / documentación |
+| **Severidad** | Media |
+| **Repositorio** | `pdf-extractext-extractor` |
+| **Ubicación** | `gunicorn.conf.py:5` (default 4); `docker-compose.yml:12` (`WEB_CONCURRENCY: "4"`); `README.md` ("4 × 1 = 4"); vs ADR 0002 e Infrastructure (`EXTRACTION_WORKERS=1`) |
+| **Descripción** | La decisión medida (1 worker × 1 slot) solo se aplicaba en Infrastructure vía env; el arranque local reproducía la configuración descartada. |
+| **Evidencia** | `performance-issue-9.md:57` (4 workers: RSS 601 MiB, p99 2,91 s) vs `:58` (1 worker: 190 MiB, 0,37 s). |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | Mediciones/smokes locales no representaban producción. |
+| **Descubrimiento** | Etapa 3A, bloque de concurrencia/workers. |
+| **Causa raíz** | `RC-015` (+ `RC-010`) |
+| **Acción** | Alinear defaults a 1. |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-19) — `gunicorn.conf.py:5`, `docker-compose.yml:12`, `README.md`; `tests/test_container_config.py` sigue verde. |
+| **Restricciones** | En Infrastructure la configuración ya era correcta. |
+
+### FIND-022
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-022` |
+| **Título** | `settings.port` muerto y puerto documentado (8000) distinto del real (8001) |
+| **Etapa** | Etapa 3A (2026-10-19) |
+| **Categoría** | configuración / documentación |
+| **Severidad** | Baja |
+| **Repositorio** | `pdf-extractext-extractor` |
+| **Ubicación** | `config.py:13` (`port`, sin lectores); `gunicorn.conf.py:7` (`PORT` default 8001); `Dockerfile:32`; `README.md` |
+| **Descripción** | Ningún código leía `settings.port`; el bind real es 8001. Un lector podía creer que configurar la app cambiaba el puerto. |
+| **Evidencia** | Grep `settings.port` en `src/` → 0 resultados; README documentaba 8000. |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | Nulo en runtime; confusión operativa/documental. |
+| **Descubrimiento** | Etapa 3A, verificación de la ruta de arranque. |
+| **Causa raíz** | `RC-005` |
+| **Acción** | Eliminar `settings.port` y unificar el puerto documentado en 8001. |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-19) — `config.py` (setting eliminada), `README.md` (tabla y ejemplos a 8001). |
+| **Restricciones** | — |
