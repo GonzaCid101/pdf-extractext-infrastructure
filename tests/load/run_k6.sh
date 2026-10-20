@@ -46,7 +46,7 @@ if [ "$RECORD" = "1" ]; then
   ./scripts/record-run.sh \
     --tool k6 \
     --target "$TARGET_URL" \
-    --load "spike k6: rampa 10s→1 VU, 20s a 1 VU, rampa 10s→0 (PDF oficial al azar; perfil TP 100 VUs pendiente, FIND-003)" \
+    --load "spike k6: rampa 10s→1 VU, 20s a 1 VU, rampa 10s→0 (PDF oficial al azar; perfil TP 100 VUs pendiente, Etapa 4)" \
     --throughput "$throughput" \
     --success "$success" \
     --p50 "$p50" --p90 "$p90" --p95 "$p95" \

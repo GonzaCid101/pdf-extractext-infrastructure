@@ -17,19 +17,26 @@ FAILURES=0
 ok()   { echo "PASS  $*"; }
 fail() { echo "FAIL  $*"; FAILURES=$((FAILURES + 1)); }
 
-# Carga .env para el test de persistencia.
+# EXTRACTION_REPLICAS del entorno manda sobre .env (`. ./.env` la pisaría).
+ENV_REPLICAS="${EXTRACTION_REPLICAS:-}"
+# Carga .env para EXTRACTION_WORKERS y el test de persistencia.
 set -a; . ./.env; set +a
+[ -n "$ENV_REPLICAS" ] && EXTRACTION_REPLICAS="$ENV_REPLICAS" || EXTRACTION_REPLICAS="${EXTRACTION_REPLICAS:-1}"
+export EXTRACTION_REPLICAS
 
 echo "== Smoke tests: bootstrap pdf-extractext =="
 
-# 1) compose up termina con los 5 servicios arriba
+# 1) compose up termina con los 5 servicios arriba (soporta 1-5 réplicas de extraction)
 $COMPOSE up -d --build >/dev/null
-UP=$($COMPOSE ps --status running --format '{{.Service}}' | sort | tr '\n' ' ')
+UP=$($COMPOSE ps --status running --format '{{.Service}}' | sort -u | tr '\n' ' ')
 if [ "$UP" = "api extraction mongodb persistence traefik " ]; then
   ok "1. los 5 servicios están running"
 else
   fail "1. servicios running inesperados: [$UP]"
 fi
+
+# Contenedor de Mongo resuelto por compose (no por nombre hardcodeado).
+mongo_cid() { $COMPOSE ps -q mongodb; }
 
 # Esperar readiness antes de verificar (ventana de arranque).
 wait_url() { # url, intentos
@@ -41,28 +48,48 @@ wait_url() { # url, intentos
   return 1
 }
 wait_mongo_healthy() {
+  local cid
   for _ in $(seq 1 30); do
-    s=$(docker inspect -f '{{.State.Health.Status}}' pdf-extractext-mongodb-1 2>/dev/null || echo starting)
+    cid=$(mongo_cid)
+    s=$(docker inspect -f '{{.State.Health.Status}}' "$cid" 2>/dev/null || echo starting)
     [ "$s" = "healthy" ] && return 0; sleep 2
   done
   return 1
 }
-wait_url https://traefik.pdf-extractext.localhost/api/overview || true
+# El dashboard vive solo en el entrypoint interno; se espera por la red de servicios.
+wait_dashboard() {
+  local c
+  for _ in $(seq 1 30); do
+    c=$(docker run --rm --network "$NET_SERVICES" "$CURL_IMG" \
+      -s -o /dev/null -w '%{http_code}' --max-time 3 \
+      -H "Host: traefik.pdf-extractext.localhost" http://traefik:8090/api/overview || echo 000)
+    [ "$c" = "200" ] && return 0; sleep 2
+  done
+  return 1
+}
+wait_dashboard || true
 wait_mongo_healthy || true
 
-# 2) Traefik responde (dashboard con TLS local, dominio interno)
-code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 5 https://traefik.pdf-extractext.localhost/api/overview || echo 000)
-[ "$code" = "200" ] && ok "2. Traefik responde (dashboard TLS)" \
-                    || fail "2. Traefik no responde (HTTP $code)"
+# 2) Traefik responde: dashboard SOLO en la red interna (:8090), nunca en :443
+c1=$(docker run --rm --network "$NET_SERVICES" "$CURL_IMG" \
+  -s -o /dev/null -w '%{http_code}' --max-time 5 \
+  -H "Host: traefik.pdf-extractext.localhost" http://traefik:8090/api/overview || echo 000)
+c2=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 5 https://traefik.pdf-extractext.localhost/api/overview || echo 000)
+if [ "$c1" = "200" ] && [ "$c2" != "200" ]; then
+  ok "2. dashboard accesible solo en red interna (interno: $c1, público: $c2)"
+else
+  fail "2. dashboard (interno: $c1, público: $c2 — esperaba 200 y no-200)"
+fi
 
 # 3) MongoDB pasa su healthcheck
-status=$(docker inspect -f '{{.State.Health.Status}}' pdf-extractext-mongodb-1 2>/dev/null || echo missing)
+status=$(docker inspect -f '{{.State.Health.Status}}' "$(mongo_cid)" 2>/dev/null || echo missing)
 [ "$status" = "healthy" ] && ok "3. MongoDB healthy" \
                           || fail "3. MongoDB health status: $status"
 
-# 4) Extraction está up
-$COMPOSE ps --status running --services | grep -qx extraction \
-  && ok "4. Extraction running" || fail "4. Extraction no está running"
+# 4) Extraction tiene al menos 1 réplica running (1-5); `ps --services` colapsa réplicas.
+replicas=$($COMPOSE ps -q extraction | wc -l)
+[ "$replicas" -ge 1 ] && ok "4. Extraction running ($replicas réplica/s)" \
+                     || fail "4. Extraction sin réplicas running"
 
 # 5) Extraction responde GET /health: directo y vía Traefik interno (:8090)
 c1=$(docker run --rm --network "$NET_SERVICES" "$CURL_IMG" \
@@ -175,7 +202,7 @@ else
 fi
 
 # 12) Persistence es dueño del índice único checksum_1
-indexes=$(docker exec pdf-extractext-mongodb-1 mongosh --quiet \
+indexes=$(docker exec "$(mongo_cid)" mongosh --quiet \
   -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" \
   --authenticationDatabase admin pdf_extractext \
   --eval 'db.pdf_documents.getIndexes().filter(i => i.name === "checksum_1" && i.unique === true).length')
@@ -184,14 +211,14 @@ indexes=$(docker exec pdf-extractext-mongodb-1 mongosh --quiet \
 
 # 13) down && up conserva los datos (inserta/limpia un doc temporal directo en Mongo, sin CRUD).
 MARKER="smoke-$(date +%s)"
-MONGO() { docker exec pdf-extractext-mongodb-1 mongosh --quiet \
+MONGO() { docker exec "$(mongo_cid)" mongosh --quiet \
   -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" \
   --authenticationDatabase admin "$@" ; }
 MONGO smoke --eval "db.markers.insertOne({marker: '$MARKER'})" >/dev/null
 $COMPOSE down >/dev/null
 $COMPOSE up -d >/dev/null
 for _ in $(seq 1 30); do # esperar a que Mongo vuelva a healthy
-  s=$(docker inspect -f '{{.State.Health.Status}}' pdf-extractext-mongodb-1 2>/dev/null || echo starting)
+  s=$(docker inspect -f '{{.State.Health.Status}}' "$(mongo_cid)" 2>/dev/null || echo starting)
   [ "$s" = "healthy" ] && break; sleep 2
 done
 found=$(MONGO smoke --eval "db.markers.countDocuments({marker: '$MARKER'})" | tail -n1)
