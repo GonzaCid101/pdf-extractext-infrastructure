@@ -9,11 +9,15 @@ repos de los servicios.
 
 ### D1. Traefik con TLS local (patrón del repo docente)
 - **Decisión:** entrypoints `:80` (redirect → :443) y `:443`; certs generados
-  con mkcert (`make certs`); dashboard detrás de `Host(traefik.pdf-extractext.localhost)`
-  con TLS. Se elimina `api.insecure` y el puerto 8080.
+  con mkcert (`make certs`); dashboard detrás de `Host(traefik.pdf-extractext.localhost)`.
+  Se elimina `api.insecure` y el puerto 8080.
+- **Dashboard:** vive en el entrypoint `internal` (`:8090`), **no** en `:443`
+  —el borde público queda exclusivo para la API y el dashboard no se expone sin
+  autenticación (`FIND-036`, `ASK-015`).
 - **Contexto:** se adopta el patrón del repo del docente, adaptado de dominio
   `universidad.localhost` → `pdf-extractext.localhost`.
-- **Descartado:** HTTP plano dev-only (rompe paridad con el patrón pedido).
+- **Descartado:** HTTP plano dev-only (rompe paridad con el patrón pedido);
+  `basicAuth` sobre el dashboard en `:443` (se prefirió restringirlo al entrypoint interno).
 
 ### D2. Dominio local `pdf-extractext.localhost`
 - Los subdominios `*.localhost` resuelven a 127.0.0.1 sin tocar `/etc/hosts`.
@@ -113,7 +117,7 @@ repos de los servicios.
   `API_TAG`; red `services` únicamente (sin acceso a `data`); expone `:8000`
   solo a la red interna (no publicado al host).
 - Env inyectadas: `EXTRACTION_URL=http://traefik:8090` (entrypoint interno,
-  ver D3), `PERSISTENCE_URL=http://persistence:8002`, `MAX_FILE_SIZE_MB=50`.
+  ver D3), `PERSISTENCE_URL=http://persistence:8002`, `MAX_FILE_SIZE_MB=16`.
 - Router público `Host(pdf-extractext.localhost)` en entrypoint `https` con
   TLS (mkcert); la redirección :80→:443 es global en la config estática, por lo
   que no se define un router HTTP redundante.
@@ -127,3 +131,31 @@ repos de los servicios.
 - Propagación (FIND-012): los 4xx y el 503 del extractor pasan tal cual (el
   503 con su `Retry-After`); 502 solo para fallos de red/timeout o 500.
 - Unifica el contrato y elimina el legacy `{"error": "..."}` (CON-019).
+
+## Restricciones aceptadas por diseño (Etapa 3C)
+
+### D17. Nombre de proyecto fijo `pdf-extractext` (FIND-037)
+- **Decisión:** se acepta el acoplamiento al nombre de proyecto: `name: pdf-extractext`
+  en el compose fija `providers.docker.network: pdf-extractext_services` y los
+  nombres de contenedor que usa el smoke.
+- **Contexto:** cambiar `name:`/`COMPOSE_PROJECT_NAME` rompería el descubrimiento
+  de Traefik y los checks; es un proyecto único del TP, no una librería reutilizable.
+- **Descartado:** derivar red/contenedores por env (fricción sin beneficio real aquí).
+
+### D18. Digests solo en la imagen de la API (FIND-044)
+- **Decisión:** se mantiene el pinneo por digest únicamente en `pdf-extractext-api`
+  (base de build y runtime distroless). Persistence y Extraction usan tags por
+  versión (`golang:1.27-alpine`, `python:3.12-slim`).
+- **Contexto:** pinnear digests mutables rigidiza los builds locales sin aportar
+  al objetivo del TP; se cierra como **riesgo bajo aceptado** (supply-chain).
+- **Descartado:** pinnear digests en los tres (reproducibilidad bit-a-bit fuera de alcance).
+
+### D19. Traefik sin healthcheck HTTP propio ni forwardingTimeouts (FIND-035)
+- **Decisión:** el borde no declara `serversTransport.forwardingTimeouts` ni
+  `loadbalancer.healthcheck.*`; la exclusión de réplicas degradadas la hace el
+  healthcheck de Docker (provider docker con `allowEmptyServices=false`) y los
+  timeouts efectivos los impone el cliente de la API (30 s) + `IdleTimeout` 120 s.
+- **Contexto:** sin corrida de carga no se cuantifica el impacto; la ventana de
+  exclusión es ≈ intervalo×retries (10 s × 5).
+- **Descartado (por ahora):** topes en el borde; se reevalúan en la Etapa 4 solo
+  si la corrida muestra 502/503 del borde.

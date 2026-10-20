@@ -31,6 +31,16 @@ Taxonomía: `[VERIFICADO-CÓDIGO]`, `[VERIFICADO-PRUEBA]`, `[DOCUMENTADO-NO-VERI
 | `RC-017` | El cliente HTTP de la API usa el `DefaultTransport` de Go (2 conexiones inactivas por host): bajo carga no sostiene keep-alive y abre/destruye sockets. | `FIND-024` | Resuelta (2026-10-19) | `[VERIFICADO-CÓDIGO]` |
 | `RC-018` | Sin timeout de lectura/escritura en `http.Server` de Persistence y sin `IdleTimeout`/`ReadTimeout` en ninguno de los dos servicios Go. | `FIND-025`, `FIND-031` | Resuelta (2026-10-19) | `[VERIFICADO-CÓDIGO]` |
 | `RC-019` | Deriva interna de Persistence: código legado de la issue #3 convive con el activo, el repo no sincronizó las correcciones registradas (RFC 9457, README) y arrastra comentarios verbosos/IDs de auditoría. | `FIND-026`, `FIND-027`, `FIND-028`, `FIND-029` | Resuelta (2026-10-19) | `[VERIFICADO-CÓDIGO]` |
+| `RC-020` | La imagen runtime de API usa distroless base (root); el usuario final nunca se revisó con `docker inspect`. | `FIND-032` | Resuelta (2026-10-20) | `[VERIFICADO-PRUEBA]` |
+| `RC-021` | El apagado ordenado no fue criterio de aceptación: la API no captura señales y el compose no fija `stop_grace_period`. | `FIND-033`, `FIND-034` | Resuelta (2026-10-20) | `[VERIFICADO-CÓDIGO]` |
+| `RC-022` | Traefik quedó con la configuración mínima (routers+TLS): sin healthcheck HTTP, sin timeouts de reenvío ni límite de cuerpo; la capa efectiva la ponen los timeouts del cliente API. | `FIND-035` | Aceptada por diseño (ADR D19, 2026-10-20) | `[VERIFICADO-CÓDIGO]` |
+| `RC-023` | El dashboard de Traefik se habilitó para desarrollo local sin política de acceso. | `FIND-036` | Resuelta (2026-10-20) | `[VERIFICADO-CÓDIGO]` |
+| `RC-024` | Nombres de proyecto/red y credenciales quedaron acoplados entre `traefik.yml`, compose y smoke, con defaults inconsistentes. | `FIND-037`, `FIND-038` | Resuelta/aceptada (2026-10-20) | `[VERIFICADO-CÓDIGO]` |
+| `RC-025` | Los scripts de verificación se escribieron para 1 réplica y no se actualizaron con la exigencia de escala 1–5. | `FIND-039` | Resuelta (2026-10-20) | `[VERIFICADO-CÓDIGO]` |
+| `RC-026` | La documentación pública no se actualizó al 100% tras 3A/3B (OpenAPI incompleto; README/env de API local con valores de arranque). | `FIND-040`, `FIND-041` | Resuelta (2026-10-20) | `[VERIFICADO-CÓDIGO]` |
+| `RC-027` | Deuda de Clean Code heredada del bootstrap: IDs de issues en Dockerfiles/scripts y targets duplicados en Makefiles. | `FIND-042`, `FIND-046` | Resuelta / diferida a Etapa 4 (2026-10-20) | `[VERIFICADO-CÓDIGO]` |
+| `RC-028` | Endurecimiento de imágenes/.dockerignore definido por repo, sin estándar mínimo común (digests, USER, exclusiones). | `FIND-043`, `FIND-044` | Resuelta/aceptada (2026-10-20) | `[VERIFICADO-CÓDIGO]` |
+| `RC-029` | El estado del host se apartó de lo declarado (Traefik del proyecto sin red/puertos; Traefik ajeno reteniendo 80/443) sin registro. | `FIND-045` | Resuelta (2026-10-20) | `[VERIFICADO-PRUEBA]` |
 
 ---
 
@@ -686,3 +696,339 @@ Taxonomía: `[VERIFICADO-CÓDIGO]`, `[VERIFICADO-PRUEBA]`, `[DOCUMENTADO-NO-VERI
 | **Acción** | Helper `isTimeout` (`context.DeadlineExceeded`/`os.ErrDeadlineExceeded`/`net.Error.Timeout`) unifica el mapeo a 504 en upload/extract; tests de timeout de red y E2E. |
 | **Estado** | Resuelto (implementado 2026-10-19) |
 | **Restricciones** | — |
+
+### FIND-032
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-032` |
+| **Título** | El contenedor de API corre como root; Persistence y Extraction corren non-root |
+| **Etapa** | Etapa 3C (2026-10-19) |
+| **Categoría** | seguridad / contenedores |
+| **Severidad** | Media |
+| **Repositorio** | `pdf-extractext-api` |
+| **Ubicación** | `Dockerfile:28` (`gcr.io/distroless/static-debian12` sin `:nonroot`, sin `USER`); contraste `persistence/Dockerfile:19,25` (`:nonroot` + `USER nonroot`), `extractor/Dockerfile:23,31` (`appuser` uid 10001) |
+| **Descripción** | La variante base de distroless ejecuta como root; los otros dos servicios sí bajan de privilegios. `no-new-privileges` (compose) mitiga la escalada, pero el proceso sigue siendo uid 0. |
+| **Evidencia** | `docker inspect pdf-extractext-api-1` → `Config.User=""`, ejecución efectiva `user=0`; persistence `user=nonroot`; extraction `user=appuser` (runtime 2026-10-19). |
+| **Taxonomía** | `[VERIFICADO-PRUEBA]` |
+| **Impacto** | Superficie de privilegios innecesaria en el punto de entrada público si el binario es comprometido. |
+| **Descubrimiento** | Etapa 3C, bloque de usuarios/seguridad de contenedores. |
+| **Causa raíz** | `RC-020` |
+| **Acción** | Usar `distroless/static-debian12:nonroot` + `USER nonroot` y verificar la ejecución del binario. |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-20): imagen `distroless:nonroot` + `USER nonroot`. |
+| **Restricciones** | Requiere rebuild de imagen (fase de correcciones). |
+
+### FIND-033
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-033` |
+| **Título** | API sin graceful shutdown: no captura SIGTERM/SIGINT |
+| **Etapa** | Etapa 3C (2026-10-19) |
+| **Categoría** | robustez / operabilidad |
+| **Severidad** | Media |
+| **Repositorio** | `pdf-extractext-api` |
+| **Ubicación** | `cmd/api/main.go:46-49` (`app.Listen` sin manejo de señal); `Dockerfile:39` (`ENTRYPOINT ["/api"]` exec → PID 1 recibe SIGTERM) |
+| **Descripción** | El proceso termina por disposición por defecto del runtime Go: las requests en vuelo se abortan en cada stop/re-escala/redeploy del contenedor de la API. |
+| **Evidencia** | Grep `signal.Notify|SIGTERM|SIGINT` en `.go` de API → 0 en producción (solo `extract_test.go:103` llama `app.Shutdown()` en test). Contraste: persistence `cmd/api/main.go:54-77` (`signal.NotifyContext` + `srv.Shutdown` + `db.Disconnect`); extraction: `CMD ["gunicorn", …]` exec (`extractor/Dockerfile:37`) → gunicorn maneja SIGTERM. |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | Durante `docker compose stop`, re-escala o redeploy se pierden requests en curso (5xx o cortes para el cliente final). |
+| **Descubrimiento** | Etapa 3C, verificación de señales de terminación. |
+| **Causa raíz** | `RC-021` |
+| **Acción** | `signal.NotifyContext` + `app.Shutdown()` con timeout. |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-20): `signal.NotifyContext` + `app.ShutdownWithTimeout(10s)`. |
+| **Restricciones** | — |
+
+### FIND-034
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-034` |
+| **Título** | `stop_grace_period` default (10 s) menor que el graceful timeout de gunicorn (30 s) |
+| **Etapa** | Etapa 3C (2026-10-19) |
+| **Categoría** | operabilidad / configuración |
+| **Severidad** | Baja |
+| **Repositorio** | `pdf-extractext-infrastructure` |
+| **Ubicación** | `docker-compose.yml` (sin `stop_grace_period` en ningún servicio); `pdf-extractext-extractor/gunicorn.conf.py` (sin `graceful_timeout`) |
+| **Descripción** | Al parar o re-escalar Extraction, Docker envía SIGTERM y SIGKILL a los 10 s; una extracción larga en vuelo (hasta 30 s del lado del cliente API) sería asesinada en vez de drenada. |
+| **Evidencia** | Grep `stop_grace_period` en compose → 0; `docker inspect` → `.HostConfig.StopGracePeriod` ausente (default 10 s); gunicorn `graceful_timeout` default 30 s. |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` + `[HIPÓTESIS]` (el impacto depende de la duración en vuelo) |
+| **Impacto** | Al bajar de 5→1 réplicas o en redeploy, trabajos en curso se pierden pese al manejo de SIGTERM de gunicorn. |
+| **Descubrimiento** | Etapa 3C, cruce compose ↔ gunicorn. |
+| **Causa raíz** | `RC-021` |
+| **Acción** | `stop_grace_period: 35s` en extraction (y drenado acorde en api/persistence cuando `FIND-033` esté resuelto). |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-20): `stop_grace_period` 35s (extraction) y 15s (api/persistence). |
+| **Restricciones** | — |
+
+### FIND-035
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-035` |
+| **Título** | Traefik sin healthcheck HTTP de backend, sin timeouts de reenvío ni límite de cuerpo |
+| **Etapa** | Etapa 3C (2026-10-19) |
+| **Categoría** | configuración / robustez del borde |
+| **Severidad** | Baja (aceptado por diseño; falta documentarlo en el ADR) |
+| **Repositorio** | `pdf-extractext-infrastructure` |
+| **Ubicación** | `traefik/traefik.yml` (sin `serversTransport`/`transport`); `docker-compose.yml:80-84` (labels sin `loadbalancer.healthcheck.*`); healthcheck de extraction `docker-compose.yml:93-98` |
+| **Descripción** | La exclusión de réplicas degradadas depende solo del healthcheck de Docker de la réplica (docs Traefik v3: con `allowEmptyServices=false` el provider excluye contenedores unhealthy). No hay tope de `responseHeaderTimeout` ni `maxRequestBodyBytes` en Traefik: la capa efectiva la pone el cliente de la API (30 s). |
+| **Evidencia** | `traefik.yml` completo (35 líneas) sin sección de transport; grep `healthcheck|serversTransport` en labels del compose → solo `loadbalancer.server.port`. Ventana de exclusión ≈ intervalo 10 s × retries 5 + start (`docker-compose.yml:96-98`). |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | Una réplica unhealthy puede seguir en el pool hasta ~60 s; el borde no tiene tope propio de tiempo de respuesta (limitado por API 30 s e `IdleTimeout` 120 s). |
+| **Descubrimiento** | Etapa 3C, bloque de Traefik/escalado. |
+| **Causa raíz** | `RC-022` |
+| **Acción** | Documentar en ADR la dependencia del healthcheck Docker; evaluar `loadbalancer.healthcheck` y `serversTransport.forwardingTimeouts` si la corrida final muestra 502/503 del borde. |
+| **Estado** | `[ACEPTADO POR DISEÑO]` (2026-10-20): documentado en ADR D19. |
+| **Restricciones** | Sin corrida de carga no se cuantifica. |
+
+### FIND-036
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-036` |
+| **Título** | Dashboard de Traefik expuesto en el entrypoint público sin autenticación |
+| **Etapa** | Etapa 3C (2026-10-19) |
+| **Categoría** | seguridad |
+| **Severidad** | Media |
+| **Repositorio** | `pdf-extractext-infrastructure` |
+| **Ubicación** | `traefik/traefik.yml:20-21` (`api.dashboard: true`); `traefik/dynamic/config.yml:5-9` (router `traefik.pdf-extractext.localhost` en entrypoint `https`, sin middleware) |
+| **Descripción** | Cualquier proceso local puede consultar el mapa completo de routers/servidores del stack vía el dashboard en :443; no hay `basicAuth`, IP allowlist ni restricción al entrypoint `internal`. |
+| **Evidencia** | Configuración completa de Traefik leída; grep de middlewares en `dynamic/config.yml` → ninguno. |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | Fuga de topología/rutas del sistema en un entorno que además monta el docker.sock (`:ro`). |
+| **Descubrimiento** | Etapa 3C, bloque de seguridad de infraestructura. |
+| **Causa raíz** | `RC-023` |
+| **Acción** | `basicAuth` sobre el router del dashboard o moverlo al entrypoint interno. |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-20): dashboard al entrypoint `internal` (`:443` exclusivo de la API). |
+| **Restricciones** | Decisión del equipo (usabilidad del dashboard en dev). |
+
+### FIND-037
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-037` |
+| **Título** | Acoplamiento duro al nombre del proyecto (`pdf-extractext`) en Traefik y smoke |
+| **Etapa** | Etapa 3C (2026-10-19) |
+| **Categoría** | configuración / Twelve-Factor |
+| **Severidad** | Baja |
+| **Repositorio** | `pdf-extractext-infrastructure` |
+| **Ubicación** | `traefik/traefik.yml:28` (`network: pdf-extractext_services`); `docker-compose.yml:1` (`name: pdf-extractext`); `scripts/smoke.sh:14` (`NET_SERVICES`) y `:45,59,178,187` (contenedor `pdf-extractext-mongodb-1`) |
+| **Descripción** | Cambiar `name:` o usar `COMPOSE_PROJECT_NAME` rompe el descubrimiento de Traefik (`providers.docker.network`) y los checks del smoke, que asuman el nombre exacto. |
+| **Evidencia** | Valores hardcodeados en los 3 archivos, sin parametrización por env. |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | Fricción operativa al clonar/renombrar el proyecto; fallos espurios de smoke/Traefik. |
+| **Descubrimiento** | Etapa 3C, revisión de Twelve-Factor. |
+| **Causa raíz** | `RC-024` |
+| **Acción** | Derivar red/contenedores vía `docker compose ps -q` o documentar el acoplamiento en el README. |
+| **Estado** | `[ACEPTADO POR DISEÑO]` (2026-10-20): documentado en ADR D17. |
+| **Restricciones** | — |
+
+### FIND-038
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-038` |
+| **Título** | Healthcheck de MongoDB sin default de interpolación (inconsistente con las env del servicio) |
+| **Etapa** | Etapa 3C (2026-10-19) |
+| **Categoría** | configuración |
+| **Severidad** | Baja |
+| **Repositorio** | `pdf-extractext-infrastructure` |
+| **Ubicación** | `docker-compose.yml:146` (`-u ${MONGO_INITDB_ROOT_USERNAME}` sin `:-dev`) vs `:134-135` (env del servicio con `${…:-dev}`) |
+| **Descripción** | Un arranque sin `.env` (fuera de `make check`) deja credenciales vacías en el healthcheck: Mongo nunca pasa a healthy y Persistence no arranca, aunque el propio Mongo sí arrancaría con dev/dev. |
+| **Evidencia** | Comparación de líneas del compose; `docker compose config` con `.env` presente sí resuelve dev/dev (verificado). |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | Arranque frágil fuera del flujo Make; confusión entre "falta .env" y "Mongo roto". |
+| **Descubrimiento** | Etapa 3C, revisión de variables de entorno. |
+| **Causa raíz** | `RC-024` |
+| **Acción** | Alinear a `${MONGO_INITDB_ROOT_USERNAME:-dev}` (o exigir env obligatoria en ambos lugares). |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-20): healthcheck de Mongo con `${…:-dev}`. |
+| **Restricciones** | — |
+
+### FIND-039
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-039` |
+| **Título** | `smoke.sh` asume 1 réplica de Extraction y nombres de contenedor fijos |
+| **Etapa** | Etapa 3C (2026-10-19) |
+| **Categoría** | testing / configuración |
+| **Severidad** | Media (el smoke no valida el stack escalado, que es la configuración exigida del TP) |
+| **Repositorio** | `pdf-extractext-infrastructure` |
+| **Ubicación** | `scripts/smoke.sh:27-32` (check 1 compara la cadena exacta `api extraction mongodb persistence traefik`); `:45,59,178,187` (nombre `pdf-extractext-mongodb-1`) |
+| **Descripción** | Con `EXTRACTION_REPLICAS>1` el check 1 falla (aparece `extraction` N veces); los checks 3/12/13 dependen del nombre por defecto del contenedor de Mongo. `record-run.sh`, en cambio, sí cuenta réplicas dinámicamente. |
+| **Evidencia** | `smoke.sh:27-32` (`ps --status running --format '{{.Service}}'` comparado con lista exacta) vs `record-run.sh:70` (`replicas()` con `grep -c`). |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | No se puede certificar con smoke un stack de 3–5 réplicas antes de las pruebas de carga. |
+| **Descubrimiento** | Etapa 3C, alineación de scripts vs escalado. |
+| **Causa raíz** | `RC-025` |
+| **Acción** | Comparar servicios únicos (`sort -u`) y resolver Mongo vía `docker compose ps -q mongodb`. |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-20): smoke soporta 1-5 réplicas y Mongo dinámico. |
+| **Restricciones** | Corrección pospuesta a la fase de correcciones. |
+
+### FIND-040
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-040` |
+| **Título** | OpenAPI incompleto: faltan `/extract` y el CRUD `/documents`; default de tamaño obsoleto |
+| **Etapa** | Etapa 3C (2026-10-19) — pendiente `R-06` |
+| **Categoría** | documentación / contrato |
+| **Severidad** | Media |
+| **Repositorio** | `pdf-extractext-api` |
+| **Ubicación** | `docs/openapi.yaml:19-33` (solo `GET /`) y `:34-193` (solo `POST /upload-pdf`); rutas reales `internal/api/extract.go:19`, `documents.go:21-24`, `root.go:13`, `upload_pdf.go:25` |
+| **Descripción** | 5 de 7 endpoints registrados no están documentados (`POST /extract`, `GET/GET{id}/PATCH/DELETE /documents`); el schema `ExtractionResponse` (`openapi.yaml:207-222`) queda huérfano y `:44` declara "20 MB por defecto" cuando el real es 16 (`internal/core/config.go:48`). |
+| **Evidencia** | `grep '^  /'` sobre el YAML → solo `/` y `/upload-pdf`; los 422/503/504 sí están bien especificados en `/upload-pdf` (`:127-193`). |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | La documentación no cubre el contrato público completo del TP. |
+| **Descubrimiento** | Etapa 3C, verificación de `R-06`/`FIND-004`. |
+| **Causa raíz** | `RC-026` |
+| **Acción** | Completar `/extract` y `/documents` (reusando `ProblemResponse`), corregir default a 16 MB. |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-20): OpenAPI 1.2.0 con `/extract`, CRUD y default 16 MB. |
+| **Restricciones** | Documentación, sin cambio de comportamiento. |
+
+### FIND-041
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-041` |
+| **Título** | README/env/compose locales de API promueven `EXTRACTION_URL` directo (sin Traefik) y default 20 MB |
+| **Etapa** | Etapa 3C (2026-10-19) |
+| **Categoría** | documentación / configuración |
+| **Severidad** | Baja |
+| **Repositorio** | `pdf-extractext-api` |
+| **Ubicación** | `.env.example:13` (`EXTRACTION_URL=http://extraction:8001`), `README.md:39` (mismo ejemplo), `docker-compose.yml:10` (`MAX_FILE_SIZE_MB:-20`) y `:13-18` (labels heredadas: red `cabras-net`, entrypoint `web`, `PathPrefix(/)`) |
+| **Descripción** | Contradice D3/DEC-03 (routing API→Extraction vía `http://traefik:8090` con Host `extraction.pdf-extractext.localhost`); el default 20 MB contradice el 16 acordado (`ASK-012`). El compose local de API queda además inutilizable sin la red externa `cabras-net`. |
+| **Evidencia** | Infrastructure `docker-compose.yml:37` fija `http://traefik:8090`; README/env de API citan el acceso directo. |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | Quien levante la API con esos archivos omite Traefik y mide un camino distinto al de producción. |
+| **Descubrimiento** | Etapa 3C, revisión Twelve-Factor/documentación cruzada. |
+| **Causa raíz** | `RC-026` |
+| **Acción** | Cambiar ejemplos a `http://traefik:8090` (o marcar `http://extraction:8001` como "solo smoke sin Traefik") y alinear el default a 16. |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-20): README/env/compose de API a `traefik:8090` y 16 MB. |
+| **Restricciones** | — |
+
+### FIND-042
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-042` |
+| **Título** | IDs de issues/auditoría en Dockerfiles, Makefiles y scripts; targets duplicados en el Makefile del extractor |
+| **Etapa** | Etapa 3C (2026-10-19) |
+| **Categoría** | clean code / documentación |
+| **Severidad** | Baja |
+| **Repositorio** | los 4 repos (infraestructura y Dockerfiles) |
+| **Ubicación** | `api/Dockerfile:2-6` (bloque "Issue #12", 5 líneas); `extractor/Dockerfile:2` ("Issue #7"); `extractor/docker-compose.yml:1`; `extractor/Makefile:15` ("Issue #8/#9") con `load-test`/`stress-test` definidos dos veces (`:16-26` vs `:37-51`, las primeras definiciones son muertas); `extractor/tests/load/profile.sh:2`; `extractor/tests/test_container_config.py:1`; `infra/tests/load/run_k6.sh:49` (`FIND-003` dentro del string de `--load`) |
+| **Descripción** | Referencias a IDs que envejecen mal en código fuente, comentarios de varias líneas y duplicación de targets en Make (make usa la última definición). |
+| **Evidencia** | Grep `Issue #|FIND-0` sobre Dockerfiles/Makefiles/scripts; lectura del Makefile del extractor. |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | Ruido y deuda de mantenibilidad; confusión sobre cuál target de carga es el activo. |
+| **Descubrimiento** | Etapa 3C, auditoría de Clean Code de infraestructura/scripts. |
+| **Causa raíz** | `RC-027` |
+| **Acción** | Eliminar IDs y la primera definición duplicada; comentarios de 1 línea solo donde aportan el "porqué". |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-20): IDs y targets duplicados eliminados. |
+| **Restricciones** | Corrección en la fase aprobada; no se modificó nada ahora. |
+
+### FIND-043
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-043` |
+| **Título** | `.dockerignore` de API y Persistence no cubren artefactos de repo (contexto de build sucio) |
+| **Etapa** | Etapa 3C (2026-10-19) |
+| **Categoría** | configuración / build |
+| **Severidad** | Baja |
+| **Repositorio** | `pdf-extractext-api`, `pdf-extractext-persistence` |
+| **Ubicación** | `api/.dockerignore` (sin `.github/`, `docs/`, `docker-compose.yml`, `Dockerfile`, `.golangci.yml`, `Makefile`); `persistence/.dockerignore` (sin `tests/`, `docker-compose.yml`, `Makefile`); el extractor sí los cubre todos (`extractor/.dockerignore:1-16`) |
+| **Descripción** | `.git` y `.env` están excluidos en los tres (correcto); el resto solo ensucia el contexto de build (multi-stage: no llegan a la imagen final). |
+| **Evidencia** | Lectura de los 3 `.dockerignore` y de los Dockerfiles (etapa runtime copia solo binarios/venv). |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | Contexto de build más grande y menos reproducible; sin fuga a la imagen final. |
+| **Descubrimiento** | Etapa 3C, bloque de Dockerfiles. |
+| **Causa raíz** | `RC-028` |
+| **Acción** | Completar exclusiones al estándar del extractor. |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-20): `.dockerignore` de API y Persistence completados. |
+| **Restricciones** | — |
+
+### FIND-044
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-044` |
+| **Título** | Endurecimiento de imágenes inconsistente: solo API pinnea bases por digest |
+| **Etapa** | Etapa 3C (2026-10-19) |
+| **Categoría** | seguridad / reproducibilidad |
+| **Severidad** | Baja |
+| **Repositorio** | los 3 servicios |
+| **Ubicación** | `api/Dockerfile:10,28` (digests pinneados); `persistence/Dockerfile:4,19` (`golang:1.27-alpine`, `distroless/static-debian12:nonroot` sin digest); `extractor/Dockerfile:5,21` (`python:3.12-slim` mutable; `:8` uv por versión) |
+| **Descripción** | Las imágenes base de Persistence y Extraction pueden cambiar bajo el mismo tag, rompiendo la reproducibilidad y la pinza de seguridad que sí tiene la API. |
+| **Evidencia** | Lectura directa de los 3 Dockerfiles. |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | Builds no bit-a-bit reproducibles; superficie de supply-chain. |
+| **Descubrimiento** | Etapa 3C, bloque de Dockerfiles. |
+| **Causa raíz** | `RC-028` |
+| **Acción** | Pinneares digests también en Persistence/Extraction (o documentar la excepción). |
+| **Estado** | `[ACEPTADO POR DISEÑO]` (2026-10-20): documentado en ADR D18 (riesgo bajo). |
+| **Restricciones** | — |
+
+### FIND-045
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-045` |
+| **Título** | Runtime degradado: el Traefik del proyecto está sin redes ni puertos y otro Traefik ajeno retiene 80/443 |
+| **Etapa** | Etapa 3C (2026-10-19) |
+| **Categoría** | operabilidad / entorno |
+| **Severidad** | **Alta** (bloquea la Etapa 4) |
+| **Repositorio** | `pdf-extractext-infrastructure` (entorno del host) |
+| **Ubicación** | `docker inspect pdf-extractext-traefik-1` (2026-10-19): `NetworkSettings.Networks {}`, `Ports {}`, arrancado 17:45Z; `docker ps`: contenedor `traefik` de otro proyecto (imagen v3.5, config en `~/dockers/traefik`) publica `0.0.0.0:80/443`; `docker network inspect pdf-extractext_services` → solo api/extraction/persistence |
+| **Descripción** | La configuración declarada (compose + `traefik.yml`) es correcta, pero el estado del host no la refleja: el Traefik del proyecto está desprendido de la red `services` y sin bind de puertos; el entrypoint público no enruta y `http://traefik:8090` no es alcanzable desde la API. |
+| **Evidencia** | `curl -sk https://pdf-extractext.localhost/` → **404** (2026-10-19 23:01Z, servido por el Traefik ajeno); API solo registra healthchecks internos en las últimas 6 h (sin tráfico E2E); sin ejecución de corrección (restricción 6). |
+| **Taxonomía** | `[VERIFICADO-PRUEBA]` |
+| **Impacto** | Todo el flujo público (smoke, k6, Vegeta, `/extract` E2E) falla hasta restaurar el stack; las verificaciones de runtime de Etapas 2/3A siguen válidas para el estado del 2026-10-18, no para el actual. |
+| **Descubrimiento** | Etapa 3C, inspección de solo lectura del stack activo. |
+| **Causa raíz** | `RC-029` |
+| **Acción** | Restaurar con `docker compose up -d` en Infrastructure (requiere autorización) y resolver el conflicto del Traefik externo sobre 80/443 (`ASK-017`). |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-20): stack restaurado y verificado E2E (smoke 15/15). |
+| **Restricciones** | No se reinició ni reconectó ningún contenedor (restricción 6). |
+
+### FIND-046
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-046` |
+| **Título** | `mock_api.py` no reproduce el contrato real (page_count 0, errores legacy, path duro) |
+| **Etapa** | Etapa 3C (2026-10-19) |
+| **Categoría** | testing |
+| **Severidad** | Baja |
+| **Repositorio** | `pdf-extractext-infrastructure` |
+| **Ubicación** | `tests/load/mock_api.py:21` (`PAGES` todos 0, nunca se llenan), `:26` (`/tmp/opencode/mock-hits.json` hardcodeado), `:57,62,69` (errores `{"error":…}`, no RFC 9457) vs `spike_tests.js:42` (exige `page_count > 0`) |
+| **Descripción** | El mock de ensayo (`RECORD=0`) haría fallar el check de contrato de k6 (`page_count`) y no valida el formato de error `problem+json` que sí emite el API real. |
+| **Evidencia** | Lectura de ambos archivos. |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | El ensayo con mock no es representativo del contrato; métricas del mock no comparables. |
+| **Descubrimiento** | Etapa 3C, revisión de scripts de carga. |
+| **Causa raíz** | `RC-027` |
+| **Acción** | Corregir `page_count`, errores `problem+json` y path de salida al retocar la suite de carga (etapa final). |
+| **Estado** | Abierto (diferido con `FIND-003`/`FIND-007`) |
+| **Restricciones** | No se ejecutó el mock (escribe en `/tmp`). |
+
+### FIND-047
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-047` |
+| **Título** | Riesgo residual de capacidad en API: 100 VUs × ~16 MB en RAM contra un tope de 512 MiB |
+| **Etapa** | Etapa 3C (2026-10-19) |
+| **Categoría** | rendimiento / capacidad |
+| **Severidad** | Media (solo se manifiesta con el spike de 100 VUs) |
+| **Repositorio** | `pdf-extractext-api` (+ Infrastructure) |
+| **Ubicación** | `docker-compose.yml:39,44` (`MAX_FILE_SIZE_MB=16`, `memory: 512M`); `cmd/api/main.go:25` (`BodyLimit`); sin límite de concurrencia en la API (`FIND-023`/`ASK-010`) |
+| **Descripción** | `FIND-030` bajó el límite de 50→16 MB, pero fasthttp sigue bufferizando el body completo: el techo teórico son ~16–32 requests concurrentes de 16 MB dentro de 512 MiB, y el único control de admisión sigue siendo el 503 de Extraction (1–5 slots). |
+| **Evidencia** | Análisis de fasthttp@v1.51.0 (`FIND-030`); límites efectivos verificados por `docker inspect` (mem=536870912, cpu=1e9). Sin corrida de carga → el OOM es `[HIPÓTESIS]`. |
+| **Taxonomía** | `[HIPÓTESIS]` + `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | Bajo el spike de 100 VUs la API puede recibir OOMKill antes que Extraction, devolviendo 502 masivos. |
+| **Descubrimiento** | Etapa 3C, ecuación de capacidad post-3A/3B. |
+| **Causa raíz** | `RC-016` |
+| **Acción** | Medir en Etapa 4 con k6 100 VUs (`docker stats`/OOMKilled); si hay OOM, decidir entre subir la memoria de la API o limitar concurrencia en el borde (reabre `ASK-010`). |
+| **Estado** | Abierto — `[DECISIÓN-PENDIENTE]` condicionada a la medición |
+| **Restricciones** | No se ejecutó carga (restricción del equipo). |

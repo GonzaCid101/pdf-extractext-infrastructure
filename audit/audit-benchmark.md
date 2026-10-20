@@ -152,6 +152,19 @@ Análisis estático; **sin ejecutar cargas** (restricción 6). Puntos a contrast
 | Backpressure | Distribución 503 (borde/servicio) vs 502/timeout (`HYP-04`, `HYP-09`) |
 | Persistencia | Latencia de `POST /documents` y de la `FindOne` de conflicto |
 
+### 5.5 Ecuación de capacidad post-3A/3B (Etapa 3C, 2026-10-19)
+
+| Capa | Cota real | Evidencia |
+|---|---|---|
+| Extracción concurrente | réplicas (1–5) × `WEB_CONCURRENCY=1` × `MAX_CONCURRENCY=1` = **1–5 peticiones simultáneas**; backlog 64/replica | `docker-compose.yml:77,86`, `.env.example:18-19` |
+| Entrada por request | ≤ 16 MB (`MAX_FILE_SIZE_MB`, `BodyLimit` de fasthttp) | `docker-compose.yml:39`, `cmd/api/main.go:25` |
+| Memoria API | 512 MiB con body bufferizado en RAM → techo teórico ≈16–32 bodies concurrentes de 16 MB; sin límite de concurrencia en la API → único control de admisión: 503 de Extraction | `FIND-047`, `FIND-023`/`ASK-010` |
+| Memoria Extraction | 1 GiB/réplica; pico Python medido 20,7 MiB (entrada 8,49 MiB) **sin** incluir MuPDF (pendiente `HYP-07`) | Etapa 3A, `docker inspect` |
+| Persistencia / Mongo | 512 MiB (timeouts 10/15/120 s) / 1 GiB | `docker-compose.yml`, `FIND-025` |
+| Borde | Traefik 0.5 CPU / 512 MiB, **1 instancia (SPOF)**, sin tope propio de tiempo de respuesta (cap = 30 s del cliente API) | `FIND-035`, `INT-04` |
+
+**A confirmar en Etapa 4:** RSS real por servicio, OOMKilled de API bajo spike 100 VUs (`FIND-047`) y distribución 503 vs 502/timeout con el stack restaurado (`FIND-045`).
+
 ---
 
 ## 6. Restricciones aplicadas en la generación de este documento
@@ -160,3 +173,4 @@ Análisis estático; **sin ejecutar cargas** (restricción 6). Puntos a contrast
 - No se modificaron scripts, Dockerfiles, compose ni datos de prueba.
 - Hashes calculados con `sha256sum` sobre el único PDF presente; tamaños con `ls -la`/`wc -c`.
 - §5 es análisis estático del código (fasthttp, clientes HTTP, driver Mongo); no son mediciones.
+- §5.5 (Etapa 3C) cruza compose/configs con las suites ejecutadas; la RSS/estabilidad real queda pendiente de Etapa 4 (`FIND-045`, `FIND-047`).
