@@ -42,6 +42,8 @@ services:
         limits: # tope del TP
           cpus: "1.0"
           memory: 512M
+    # > shutdown de 10s de la API: drena requests en vuelo antes del SIGKILL.
+    stop_grace_period: 15s
     healthcheck:
       # Exec sin shell: la imagen distroless no tiene curl/wget.
       test: ["CMD", "/healthprobe"]
@@ -88,6 +90,8 @@ services:
         limits:
           cpus: "1.0"
           memory: 1G
+    # > graceful_timeout de gunicorn (30s): drena la extracción en curso.
+    stop_grace_period: 35s
     networks:
       - services
     healthcheck:
@@ -115,6 +119,8 @@ services:
         limits: # tope del TP
           cpus: "1.0"
           memory: 512M
+    # > shutdown de 10s del servicio: drena requests y cierra MongoDB limpio.
+    stop_grace_period: 15s
     networks:
       - services
       - data # único servicio con acceso a MongoDB
@@ -143,7 +149,7 @@ services:
     networks:
       - data
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "-u", "${MONGO_INITDB_ROOT_USERNAME}", "-p", "${MONGO_INITDB_ROOT_PASSWORD}", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD", "mongosh", "--quiet", "-u", "${MONGO_INITDB_ROOT_USERNAME:-dev}", "-p", "${MONGO_INITDB_ROOT_PASSWORD:-dev}", "--eval", "db.adminCommand('ping')"]
       interval: 10s
       timeout: 5s
       retries: 5
