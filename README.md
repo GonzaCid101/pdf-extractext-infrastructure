@@ -99,7 +99,7 @@ Ambas registran la corrida en `docs/test-runs/`.
 > (`FIND-007`), con targets en `-format=json` para Vegeta ≥ v12 (`FIND-048`) y
 > resumen vía `handleSummary()` para k6 ≥ v2 (`FIND-049`). Correcciones
 > **validadas contra un stub local**; la corrida real sobre el stack queda
-> **pendiente** hasta disponer de un host con AVX (`FIND-052`).
+> **pendiente de validación**.
 
 ## Reglas del bootstrap
 

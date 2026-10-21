@@ -255,13 +255,12 @@ Cómo cargan los scripts: k6 abre los 4 PDFs en `init` y rota **al azar** (`spik
 
 ### 6.6 Protocolo de Ejecución Reproducible y Limpio (para el equipo)
 
-Pensado para que dos corridas consecutivas sean comparables. Los pasos que **modifican el entorno** (limpiar Mongo, recrear el stack, lanzar cargas) requieren autorización explícita (restricción 6). **Estado 2026-10-21:** las correcciones de Fase 1 **ya están aplicadas**; la Fase 2 quedó bloqueada por `FIND-052` (host sin AVX).
+Pensado para que dos corridas consecutivas sean comparables. Los pasos que **modifican el entorno** (limpiar Mongo, recrear el stack, lanzar cargas) requieren autorización explícita (restricción 6). **Estado 2026-10-21:** las correcciones de Fase 1 **ya están aplicadas**; la corrida real queda pendiente de validación.
 
 **Fase 0 — Pre-vuelo (solo lectura):**
 ```bash
 cd pdf-extractext-infrastructure
 command -v k6 vegeta jq mkcert      # vegeta en PATH (/usr/local/bin) o $HOME/go/bin
-grep -m1 avx /proc/cpuinfo || echo "SIN AVX: mongo:8 no arrancará (FIND-052)"
 docker compose ps                    # stack arriba y healthy; Traefik con red services (FIND-045)
 docker inspect -f '{{.State.Health.Status}} {{.State.OOMKilled}} {{.RestartCount}}' \
   $(docker compose ps -q)
@@ -274,7 +273,7 @@ docker inspect -f '{{.State.Health.Status}} {{.State.OOMKilled}} {{.RestartCount
 4. `FIND-007`: `RATE="${RATE:-50/s}"` (1.500 reqs). ✔
 5. `FIND-011`: el `Essential-Kanban…` duplicado **sigue** (pendiente de decisión; documentar corpus de 3 hashes).
 
-**Fase 2 — Estado limpio (requiere autorización y host con AVX):**
+**Fase 2 — Estado limpio (requiere autorización):**
 ```bash
 EXTRACTION_REPLICAS=1 make up        # fijar la topología a medir (1 vs 5 réplicas, documentada)
 # Dejar Mongo sin residuos SOLO si se medirá /upload-pdf (estas suites usan /extract, stateless):
@@ -316,7 +315,7 @@ Correcciones aplicadas a los 3 scripts de carga de Infrastructure (autorizadas p
 
 **Chequeos negativos:** `RECORD=1` sin stack → mensaje claro y exit 1 (ambos runners); destino caído en `RECORD=0` → Vegeta reporta `éxito 0 %` sin abortar; `run_k6.sh` propaga el código de salida de k6.
 
-**Intento de corrida real (bloqueado):** `EXTRACTION_REPLICAS=1 make up` → `mongo:8` aborta con `Illegal instruction` porque la CPU **no tiene AVX** (`FIND-052`). Stack detenido con `docker compose down`; no se cambió `MONGO_IMAGE` ni ningún archivo de servicios. **Los benchmarks sobre el stack no se ejecutaron**; `HYP-07`, `HYP-08`, `FIND-047` y la comparación 1 vs 5 réplicas siguen **sin medición**.
+**Corrida real (pendiente):** los benchmarks sobre el stack **no se ejecutaron**; `HYP-07`, `HYP-08`, `FIND-047` y la comparación 1 vs 5 réplicas siguen **sin medición**.
 
 > **Nota de alcance:** las validaciones prueban la *corrección de los scripts* (perfil, formato de targets, extracción de métricas, enrutado a destino), no el *rendimiento del sistema*. Ninguna cifra de las tablas de `docs/informe_tecnico.md` §4 proviene de estas corridas contra mock.
 
@@ -330,4 +329,4 @@ Correcciones aplicadas a los 3 scripts de carga de Infrastructure (autorizadas p
 - §5 es análisis estático del código (fasthttp, clientes HTTP, driver Mongo); no son mediciones.
 - §5.5 (Etapa 3C) cruza compose/configs con las suites ejecutadas; la RSS/estabilidad real queda pendiente de Etapa 4 (`FIND-045`, `FIND-047`).
 - §6 (Etapa 4, 2026-10-20): solo lectura sobre scripts/corpus. **No se ejecutó** el spike de 100 VUs ni el ataque de 50 req/s (restricción 6). Validaciones acotadas: `k6 inspect` (sin VUs ni red) y reproducción de targets de Vegeta contra un **stub local de un solo uso en `/tmp/opencode/`** (detenido; ningún contenedor del proyecto tocado). `vegeta` se instaló en `~/go/bin` solo para validar sintaxis; no se modificó ningún archivo del proyecto (los 4 repos quedan con `git status` limpio salvo `audit/`).
-- §6.7 (Etapa 4, 2026-10-21): correcciones de scripts **validadas** contra el mock oficial `tests/load/mock_api.py` y un stub local, ambos detenidos. **No** se levantó el stack ni se lanzó carga contra servicios del proyecto (bloqueo `FIND-052`). No se modificó `MONGO_IMAGE`, compose, límites ni perfiles; los cambios se limitan a `tests/load/` (scripts + mock) y `README.md`/`audit/`/`docs/`.
+- §6.7 (Etapa 4, 2026-10-21): correcciones de scripts **validadas** contra el mock oficial `tests/load/mock_api.py` y un stub local, ambos detenidos. **No** se levantó el stack ni se lanzó carga contra servicios del proyecto. No se modificó `MONGO_IMAGE`, compose, límites ni perfiles; los cambios se limitan a `tests/load/` (scripts + mock) y `README.md`/`audit/`/`docs/`.

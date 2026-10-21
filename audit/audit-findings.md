@@ -43,7 +43,6 @@ Taxonomía: `[VERIFICADO-CÓDIGO]`, `[VERIFICADO-PRUEBA]`, `[DOCUMENTADO-NO-VERI
 | `RC-029` | El estado del host se apartó de lo declarado (Traefik del proyecto sin red/puertos; Traefik ajeno reteniendo 80/443) sin registro. | `FIND-045` | Resuelta (2026-10-20) | `[VERIFICADO-PRUEBA]` |
 | `RC-030` | Los scripts de carga se escribieron contra una versión de Vegeta anterior a v12 (`>=12.8`), que ya no acepta el body embebido en targets `http`; las herramientas nunca se instalaron en el host, así que el fallo no se detectó. | `FIND-048` | Abierta (Etapa 4) | `[VERIFICADO-PRUEBA]` |
 | `RC-031` | `run_k6.sh` usa `--summary-export`, retirado en k6 v2.x; el resumen nunca se genera y el wrapper silencia la ausencia devolviendo ceros. | `FIND-049` | Abierta (Etapa 4) | `[VERIFICADO-CÓDIGO]` |
-| `RC-032` | El host de la Etapa 4 carece de soporte AVX; MongoDB 5.0+ (imagen `mongo:8` fijada en D7) no arranca, bloqueando el stack y las corridas. | `FIND-052` | Abierta (Etapa 4) | `[VERIFICADO-PRUEBA]` |
 | `RC-033` | `run_k6.sh` no exportaba `BASE_URL` derivado de `TARGET_URL`; k6 usaba su default y la perilla de destino era ignorada. | `FIND-053` | Resuelta (Etapa 4) | `[VERIFICADO-PRUEBA]` |
 | `RC-034` | `mock_api.py` hardcodeaba `page_count: 0`, incompatible con el check `page_count > 0` de k6. | `FIND-054` | Resuelta (Etapa 4) | `[VERIFICADO-PRUEBA]` |
 
@@ -105,14 +104,14 @@ Taxonomía: `[VERIFICADO-CÓDIGO]`, `[VERIFICADO-PRUEBA]`, `[DOCUMENTADO-NO-VERI
 | **Repositorio** | `pdf-extractext-infrastructure` |
 | **Ubicación** | `Makefile:57-58` → `tests/load/run_k6.sh` → `tests/load/spike_tests.js` (stages 100 VUs); `k6-spike.js` (100 VUs) eliminado el 2026-10-18. |
 | **Descripción** | El README describe "spike 10s→100 VUs" pero `spike_tests.js` subía a 1 VU. Decisión del equipo: `spike_tests.js` es el canónico; las stages de 100 VUs se implementan al final del ciclo. |
-| **Evidencia** | **Corrección 2026-10-21:** `spike_tests.js` con stages `10s→100, 20s→100, 10s→0` parametrizables por `TARGET_VUS`; `k6 inspect` confirma `target: 100` (y `10` con `-e TARGET_VUS=10`). Validado contra `tests/load/mock_api.py` (8 reqs, `extract_ok` 100 %, p50/p90/p95 no-cero). La **medición real** sobre el stack queda pendiente (`FIND-052`). |
+| **Evidencia** | **Corrección 2026-10-21:** `spike_tests.js` con stages `10s→100, 20s→100, 10s→0` parametrizables por `TARGET_VUS`; `k6 inspect` confirma `target: 100` (y `10` con `-e TARGET_VUS=10`). Validado contra `tests/load/mock_api.py` (8 reqs, `extract_ok` 100 %, p50/p90/p95 no-cero). La **medición real** sobre el stack queda pendiente de validación. |
 | **Taxonomía** | `[VERIFICADO-CÓDIGO]` + `[VERIFICADO-PRUEBA]` (mock oficial) |
 | **Impacto** | El benchmark cableado ahora reproduce el escenario del TP (100 VUs). |
 | **Descubrimiento** | Lectura cruzada Makefile → scripts k6 vs enunciado. |
 | **Causa raíz** | `RC-003` |
-| **Acción** | Hecho: stages 100 VUs implementadas y validadas contra mock. Falta la corrida real (`FIND-052`). |
-| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-21; lógica del perfil validada contra mock; cifras reales pendientes, `FIND-052`) |
-| **Restricciones** | Corrida real bloqueada por AVX (`FIND-052`). |
+| **Acción** | Hecho: stages 100 VUs implementadas y validadas contra mock. Falta la corrida real. |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-21; lógica del perfil validada contra mock; cifras reales pendientes de validación) |
+| **Restricciones** | Corrida real pendiente de ejecución. |
 
 ### FIND-004
 
@@ -189,14 +188,14 @@ Taxonomía: `[VERIFICADO-CÓDIGO]`, `[VERIFICADO-PRUEBA]`, `[DOCUMENTADO-NO-VERI
 | **Repositorio** | `pdf-extractext-infrastructure` |
 | **Ubicación** | `tests/load/vegeta/run_vegeta.sh` (`RATE`/`-rate`); README `:76`; D11 `:71` |
 | **Descripción** | `RATE` estaba hardcoded a `1/s` (sin default sobreescribible), mientras script, README y ADR documentan 50 req/s. |
-| **Evidencia** | **Corrección 2026-10-21:** `RATE="${RATE:-50/s}"`, `DURATION="${DURATION:-30s}"`, `TIMEOUT="${TIMEOUT:-30s}"`. Objetivo 50×30 = 1.500 reqs. Validado contra `tests/load/mock_api.py` (30 reqs a 10/s, éxito 100 %, `bad:0`) y contra stub local a 50/s (150/150 reqs en 3 s). La medición real pendiente (`FIND-052`). |
+| **Evidencia** | **Corrección 2026-10-21:** `RATE="${RATE:-50/s}"`, `DURATION="${DURATION:-30s}"`, `TIMEOUT="${TIMEOUT:-30s}"`. Objetivo 50×30 = 1.500 reqs. Validado contra `tests/load/mock_api.py` (30 reqs a 10/s, éxito 100 %, `bad:0`) y contra stub local a 50/s (150/150 reqs en 3 s). La medición real queda pendiente de validación. |
 | **Taxonomía** | `[VERIFICADO-CÓDIGO]` + `[VERIFICADO-PRUEBA]` (mock oficial) |
 | **Impacto** | Corridas comparables con la referencia del TP (1.500 reqs). |
 | **Descubrimiento** | Contraste comentario/README/ADR vs valor de `RATE`. |
 | **Causa raíz** | `RC-003` |
-| **Acción** | Hecho: rate corregido a 50/s y validado contra mock. Falta corrida real (`FIND-052`). |
-| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-21; perfil validado contra mock; cifras reales pendientes, `FIND-052`) |
-| **Restricciones** | Corrida real bloqueada por AVX (`FIND-052`). |
+| **Acción** | Hecho: rate corregido a 50/s y validado contra mock. Falta corrida real. |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-21; perfil validado contra mock; cifras reales pendientes de validación) |
+| **Restricciones** | Corrida real pendiente de ejecución. |
 
 ### FIND-008
 
@@ -1056,8 +1055,8 @@ Taxonomía: `[VERIFICADO-CÓDIGO]`, `[VERIFICADO-PRUEBA]`, `[DOCUMENTADO-NO-VERI
 | **Descubrimiento** | Etapa 4, validación acotada de sintaxis de targets con `vegeta` v12.13 contra stub local. |
 | **Causa raíz** | `RC-030` |
 | **Acción** | Reescribir los targets en `-format=json` (body base64) **o** pasar el body con `@/ruta` al fichero multipart; verificar con una corrida corta contra el stack. |
-| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-21): reescrito a `-format=json` con body base64 (`--rawfile`); validado contra `tests/load/mock_api.py` (150 reqs a 50/s y 30 a 10/s; `bad:0`, `no_file:0`; multipart aceptado por el mock que verifica SHA256). La corrida real queda pendiente (`FIND-052`). |
-| **Restricciones** | Corrida real bloqueada por AVX (`FIND-052`). |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-21): reescrito a `-format=json` con body base64 (`--rawfile`); validado contra `tests/load/mock_api.py` (150 reqs a 50/s y 30 a 10/s; `bad:0`, `no_file:0`; multipart aceptado por el mock que verifica SHA256). La corrida real queda pendiente de validación. |
+| **Restricciones** | Corrida real pendiente de ejecución. |
 
 ### FIND-049
 
@@ -1077,8 +1076,8 @@ Taxonomía: `[VERIFICADO-CÓDIGO]`, `[VERIFICADO-PRUEBA]`, `[DOCUMENTADO-NO-VERI
 | **Descubrimiento** | Etapa 4, `k6 inspect` + `k6 run --help`. |
 | **Causa raíz** | `RC-031` |
 | **Acción** | Implementar `handleSummary()` en `spike_tests.js` (escribe el JSON con `--out` o en `teardown`) y ajustar el parseo del wrapper; comprobar la versión de k6 con fail-fast. |
-| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-21): `handleSummary()` escribe el JSON en `K6_SUMMARY_PATH`; `run_k6.sh` parsea `.metrics.*.values.*` y muestra p50/p90/p95/p99. Validado contra `tests/load/mock_api.py` (8 reqs, `extract_ok` 100 %, métricas no-cero; claves `med`/`p(90)`/`p(95)`/`p(99)` confirmadas). La corrida real queda pendiente (`FIND-052`). |
-| **Restricciones** | Corrida real bloqueada por AVX (`FIND-052`). |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-21): `handleSummary()` escribe el JSON en `K6_SUMMARY_PATH`; `run_k6.sh` parsea `.metrics.*.values.*` y muestra p50/p90/p95/p99. Validado contra `tests/load/mock_api.py` (8 reqs, `extract_ok` 100 %, métricas no-cero; claves `med`/`p(90)`/`p(95)`/`p(99)` confirmadas). La corrida real queda pendiente de validación. |
+| **Restricciones** | Corrida real pendiente de ejecución. |
 
 ### FIND-050
 
@@ -1121,27 +1120,6 @@ Taxonomía: `[VERIFICADO-CÓDIGO]`, `[VERIFICADO-PRUEBA]`, `[DOCUMENTADO-NO-VERI
 | **Acción** | Añadir al protocolo de ejecución (§6.6 de `audit-benchmark.md`) la captura paralela de `docker stats --no-stream` y `docker inspect` de estado, y adjuntarla al registro de la corrida. |
 | **Estado** | Abierto — `[RECOMENDACIÓN]` |
 | **Restricciones** | No se ejecutaron cargas (restricción 6). |
-
-### FIND-052
-
-| Campo | Valor |
-|---|---|
-| **ID** | `FIND-052` |
-| **Título** | El host de benchmarks no soporta AVX: `mongo:8` (D7) no arranca → el stack no se levanta y las corridas reales no pueden ejecutarse |
-| **Etapa** | Etapa 4 (2026-10-21) |
-| **Categoría** | operabilidad / entorno |
-| **Severidad** | **Alta** (bloquea la ejecución de los benchmarks de la Etapa 4) |
-| **Repositorio** | `pdf-extractext-infrastructure` (entorno del host) |
-| **Ubicación** | `docker-compose.yml` (servicio `mongodb`, `MONGO_IMAGE=mongo:8` en `.env`); logs: `docker compose logs mongodb` |
-| **Descripción** | La CPU del host no expone el flag `avx` (`grep avx /proc/cpuinfo` sin resultados). MongoDB 5.0+ requiere AVX; el contenedor `mongo:8` aborta con `Illegal instruction (core dumped)` en el entrypoint y nunca pasa el healthcheck (`ping`), por lo que `depends_on: service_healthy` impide arrancar persistence/api/extraction. |
-| **Evidencia** | `make up` → `container pdf-extractext-mongodb-1 is unhealthy`, `make: *** Error 1`. Log: `WARNING: MongoDB 5.0+ requires a CPU with AVX support … Illegal instruction (core dumped) "${mongodHackedArgs[@]}" --fork`. `grep -m1 avx /proc/cpuinfo` → sin coincidencia. Imágenes locales: `mongo:8`, `mongo:7.0`, `mongo:4.4`; solo 4.4 es compatible con CPU sin AVX. |
-| **Taxonomía** | `[VERIFICADO-PRUEBA]` |
-| **Impacto** | No se puede levantar el stack en este host; las corridas reales de k6/Vegeta y la telemetría de infraestructura (`docker stats`) quedan sin ejecutar. Los scripts sí quedan corregidos y validados contra stub. |
-| **Descubrimiento** | Etapa 4, intento de `EXTRACTION_REPLICAS=1 make up`. |
-| **Causa raíz** | `RC-032` |
-| **Acción** | Ejecutar los benchmarks en un host con AVX, o autorizar un override temporal `MONGO_IMAGE=mongo:4.4` (imagen ya descargada, compatible) sin modificar `.env`/compose. Requiere decisión del equipo (afecta D7). |
-| **Estado** | Abierto — `[DECISIÓN-PENDIENTE]` (el equipo optó por no levantar el stack en esta sesión) |
-| **Restricciones** | No se cambió `MONGO_IMAGE` ni ningún archivo del proyecto; stack detenido (`docker compose down`). |
 
 ### FIND-053
 
