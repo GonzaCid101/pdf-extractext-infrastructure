@@ -40,11 +40,14 @@ Los logs y las métricas de contenedor confirmaron que la extracción de PDF es 
 
 ## 4. Comparativa de Métricas (pendiente de corridas válidas)
 
-> **Estado:** pendiente de corridas válidas. Hoy `tests/load/spike_tests.js`
-> corre a 1 VU (no 100) y `run_vegeta.sh` usa `RATE=1/s` (no 50 req/s):
-> `FIND-003`, `FIND-007` en `audit/audit-findings.md`. Las corridas de
-> `docs/test-runs/` (locales) usan esos perfiles y no son comparables con la
-> referencia de la cátedra.
+> **Estado (2026-10-21):** los scripts de carga ya están **corregidos y son
+> ejecutables** (`FIND-003`, `FIND-007`, `FIND-048`, `FIND-049` — ver
+> `audit/audit-findings.md`); perfil k6 = 100 VUs (40 s) y Vegeta = 50 req/s ×
+> 30 s con targets en `-format=json`, ambos validados contra un servidor stub.
+> **Las corridas reales sobre el stack NO pudieron ejecutarse en este host:**
+> la CPU no soporta AVX y `mongo:8` (fijado en D7) aborta con `Illegal
+> instruction`, por lo que el stack no arranca. Las tablas de abajo siguen
+> **vacías por diseño**: no se presentan cifras no medidas.
 
 ### Escenario Base: 1 Réplica de Extraction
 
@@ -52,11 +55,11 @@ Los logs y las métricas de contenedor confirmaron que la extracción de PDF es 
 
 | Métrica | Valor | Unidad | Observaciones |
 | :--- | :--- | :--- | :--- |
-| Latencia (p95) | — | ms | pendiente de corrida válida |
-| Latencia (p99) | — | ms | pendiente de corrida válida |
-| Throughput | — | req/s | pendiente de corrida válida |
-| Tasa de errores (503) | — | % | pendiente de corrida válida |
-| Tasa de errores (500) | — | % | pendiente de corrida válida |
+| Latencia (p95) | — | ms | no medido: stack no arranca en este host (sin AVX) |
+| Latencia (p99) | — | ms | no medido: stack no arranca en este host (sin AVX) |
+| Throughput | — | req/s | no medido: stack no arranca en este host (sin AVX) |
+| Tasa de errores (503) | — | % | no medido: stack no arranca en este host (sin AVX) |
+| Tasa de errores (500) | — | % | no medido: stack no arranca en este host (sin AVX) |
 
 ### Escenario Optimizado: 5 Réplicas de Extraction
 
@@ -64,15 +67,18 @@ Los logs y las métricas de contenedor confirmaron que la extracción de PDF es 
 
 | Métrica | Valor | Unidad | Observaciones |
 | :--- | :--- | :--- | :--- |
-| Latencia (p95) | — | ms | pendiente de corrida válida |
-| Latencia (p99) | — | ms | pendiente de corrida válida |
-| Throughput | — | req/s | pendiente de corrida válida |
-| Tasa de errores (503) | — | % | pendiente de corrida válida |
-| Tasa de errores (500) | — | % | pendiente de corrida válida |
+| Latencia (p95) | — | ms | no medido: stack no arranca en este host (sin AVX) |
+| Latencia (p99) | — | ms | no medido: stack no arranca en este host (sin AVX) |
+| Throughput | — | req/s | no medido: stack no arranca en este host (sin AVX) |
+| Tasa de errores (503) | — | % | no medido: stack no arranca en este host (sin AVX) |
+| Tasa de errores (500) | — | % | no medido: stack no arranca en este host (sin AVX) |
 
 ### Conclusión
 
 La hipótesis a validar es que escalar horizontalmente Extraction de 1 a 5
 réplicas reduce la latencia y los rechazos por saturación (503) y aumenta el
-throughput, según el análisis cualitativo de la §3. La conclusión numérica
-queda pendiente de las corridas de carga válidas.
+throughput, según el análisis cualitativo de la §3. **La conclusión numérica
+sigue pendiente**: el pipeline de medición está listo (scripts corregidos,
+protocolo en `audit/audit-benchmark.md` §6.6), pero requiere un host con soporte
+AVX (o una imagen MongoDB compatible) para levantar el stack y correr los
+benchmarks.

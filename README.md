@@ -91,11 +91,15 @@ Ambas registran la corrida en `docs/test-runs/`.
   `run_k6.sh`/`run_vegeta.sh` son locales (`.gitignore`); solo `TEMPLATE.md`
   se versiona.
 - **RECORD=0**: ensayo sin registrar (p. ej. contra `tests/load/mock_api.py`).
+- **Overrides**: `TARGET_URL` (destino; por defecto el dominio público),
+  `TARGET_VUS` (k6; por defecto 100), `RATE`/`DURATION`/`TIMEOUT` (Vegeta).
 
-> **Nota (perfiles en corrección):** hoy `spike_tests.js` sube a 1 VU (no
-> 100) y `run_vegeta.sh` usa `RATE=1/s` (no 50 req/s): hasta corregirlos
-> (`FIND-003`, `FIND-007` en `audit/audit-findings.md`) las corridas no son
-> comparables con la referencia de la cátedra.
+> **Nota (perfiles corregidos, 2026-10-21):** `spike_tests.js` ya ejecuta el
+> spike de 100 VUs (`FIND-003`) y `run_vegeta.sh` ataca a 50 req/s
+> (`FIND-007`), con targets en `-format=json` para Vegeta ≥ v12 (`FIND-048`) y
+> resumen vía `handleSummary()` para k6 ≥ v2 (`FIND-049`). Correcciones
+> **validadas contra un stub local**; la corrida real sobre el stack queda
+> **pendiente** hasta disponer de un host con AVX (`FIND-052`).
 
 ## Reglas del bootstrap
 
