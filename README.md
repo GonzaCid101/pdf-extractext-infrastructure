@@ -84,9 +84,8 @@ Ambas registran la corrida en `docs/test-runs/`.
 - **Vegeta** (`tests/load/vegeta/run_vegeta.sh`): pre-compila cuerpos
   multipart de los 4 PDFs oficiales y lanza un único ataque a 50 req/s.
 - **PDFs oficiales** (`tests/load/pdfs/`): los 4 del profesor, versionados
-  para que un clon limpio corra las pruebas sin pasos manuales. ⚠️
-  `Essential-Kanban-Condensed-Spanish.pdf` es idéntico a `heavy.292.pdf` del
-  extractor (`FIND-011` en `audit/audit-findings.md`).
+  para que un clon limpio corra las pruebas sin pasos manuales. Corpus
+  oficial único: 4 hashes únicos (`FIND-011` resuelto, 2026-10-21).
 - **Registro de corridas** (`docs/test-runs/`): los `.md` que generan
   `run_k6.sh`/`run_vegeta.sh` son locales (`.gitignore`); solo `TEMPLATE.md`
   se versiona.

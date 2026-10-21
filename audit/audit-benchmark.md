@@ -11,7 +11,7 @@ Inspección de solo lectura: `find`, `ls`, `wc`, `sha256sum` (2026-10-17).
 
 | Repo | Ruta | Tamaño (bytes) | SHA-256 | Notas |
 |---|---|---|---|---|
-| `pdf-extractext-extractor` | `tests/data/heavy.292.pdf` | 8.901.466 | `257f73b908420ac5c78852fb8673beb683a8ca0c05d2e6a82b5e9629f6ad7be8` | Usado por `tests/load/k6_suite.js` y `tests/load/vegeta_target.sh` del repo Extractor. `[VERIFICADO-CÓDIGO]` |
+| `pdf-extractext-extractor` | `tests/data/heavy.292.pdf` | 8.901.466 | `257f73b908420ac5c78852fb8673beb683a8ca0c05d2e6a82b5e9629f6ad7be8` | Idéntico a `Essential-Kanban-Condensed-Spanish.pdf` (`FIND-011`); eliminado 2026-10-21 con la suite del Extractor. `[VERIFICADO-CÓDIGO]` |
 
 **Total de PDFs en el workspace (2026-10-18): 5** = `heavy.292.pdf` (extractor) + los 4 PDFs oficiales en `tests/load/pdfs/` (ver §1.2). Nota: `Essential-Kanban-Condensed-Spanish.pdf` es una copia exacta de `heavy.292.pdf`. `[VERIFICADO-CÓDIGO]`
 
@@ -26,13 +26,13 @@ Re-verificado el 2026-10-18: los 4 PDFs que esperan `run_vegeta.sh:34-43` y `spi
 | 3 | `Filosofia Lean.pdf` | 668.142 | `c77b55bd68477ecc0d96074ea4606bffe5802a1c8a241a725f6eb358be17ce40` |
 | 4 | `scrum_manager_historias_usuario.pdf` | 3.830.899 | `30efd6fcd0c022665676edcf164feb28e6b43dcce53ab9738550b99d70f5fd84` |
 
-- **Hallazgo (`FIND-011`):** el archivo `Essential-Kanban-Condensed-Spanish.pdf` es **byte a byte idéntico** a `pdf-extractext-extractor/tests/data/heavy.292.pdf` (mismo SHA-256 y tamaño). Es decir, el conjunto de 4 PDFs contiene un duplicado de un PDF de 8,9 MB / 292 páginas etiquetado como el documento Kanban, no el documento oficial. Esto afecta la validez del benchmark (rota 4 targets pero dos son el mismo archivo, y uno es desproporcionadamente pesado).
+- **Hallazgo (`FIND-011`, resuelto 2026-10-21):** `Essential-Kanban-Condensed-Spanish.pdf` era **byte a byte idéntico** a `pdf-extractext-extractor/tests/data/heavy.292.pdf` (mismo SHA-256 y tamaño): el duplicado estaba en el Extractor, no en este corpus. Se eliminó `heavy.292.pdf` con la suite de carga del Extractor; los 4 PDFs de Infrastructure tienen hashes únicos y son el corpus oficial.
 - Ubicación: `pdf-extractext-infrastructure/tests/load/pdfs/` (versionados).
 - La ruta del enunciado `tests/stress/pdfs` **no existe** en ningún repo (`FIND-001`, `ASK-002`).
 
 #### Re-verificación Etapa 4 (2026-10-20) — características de extracción
 
-Medición de solo lectura del corpus con `pdfinfo`, `pdfimages -list`, `pdftotext` y `sha256sum` (sin ejecutar cargas). **Reinterpretación de `FIND-011`:** "Essential-Kanban" tiene **90 páginas** (no 292), coincide con `heavy.292.pdf` y con la cifra de 90 páginas que la Etapa 3A registró para `heavy.292` (§6 item 29). El corpus contiene por tanto solo **dos documentos de texto pesado** (Kanban 8,5 MB y Scrum Manager 3,7 MB) y **3 hashes únicos**, no 4 documentos independientes.
+Medición de solo lectura del corpus con `pdfinfo`, `pdfimages -list`, `pdftotext` y `sha256sum` (sin ejecutar cargas). **Reinterpretación de `FIND-011`:** "Essential-Kanban" tiene **90 páginas** (no 292), coincide con `heavy.292.pdf` y con la cifra de 90 páginas que la Etapa 3A registró para `heavy.292` (§6 item 29). El corpus contiene solo **dos documentos de texto pesado** (Kanban 8,5 MB y Scrum Manager 3,7 MB); sus 4 archivos tienen **hashes únicos entre sí** (la coincidencia era con `heavy.292.pdf` del Extractor, eliminado el 2026-10-21).
 
 | # | Nombre | Páginas | Páginas con texto | Caracteres de texto | Imágenes | Tipo |
 |---|---|---|---|---|---|---|
@@ -71,7 +71,7 @@ versionados): `FIND-003` / `ASK-003`.
 
 `[VERIFICADO-CÓDIGO]` — todos los archivos listados existen y fueron leídos.
 
-### 2.2 Extractor (`pdf-extractext-extractor`) — suite del servicio aislado
+### 2.2 Extractor (`pdf-extractext-extractor`) — suite del servicio aislado (eliminada 2026-10-21)
 
 | Herramienta | Ruta | Perfil | Target | PDF usado |
 |---|---|---|---|---|
@@ -81,7 +81,7 @@ versionados): `FIND-003` / `ASK-003`.
 
 `[VERIFICADO-CÓDIGO]`
 
-**Duplicidad:** existen dos suites k6/Vegeta con objetivos distintos (sistema completo vía dominio público vs servicio Extraction aislado). Cuál es la canónica del TP: `ASK-003` / `FIND-003`.
+**Duplicidad (resuelta 2026-10-21):** solo queda la suite de Infrastructure; la del Extractor fue eliminada. Canónica del TP: `ASK-003` / `FIND-003`.
 
 ---
 
@@ -126,7 +126,7 @@ Coherencia estática observada: `run_vegeta.sh` fija `DURATION=30s`, `TIMEOUT=30
 |---|---|---|
 | Stack Docker con Traefik + TLS | Por verificar en runtime | Requiere `make certs` (mkcert) y `make up`; certs no generados en este entorno de auditoría |
 | `k6`, `vegeta`, `jq` instalados en el host | No verificado | Los scripts hacen `command -v` con fail-fast |
-| 4 PDFs oficiales en `tests/load/pdfs/` | **Presentes y versionados** | `FIND-001`; uno de ellos (`Essential-Kanban…`) es un duplicado de `heavy.292.pdf` → `FIND-011` |
+| 4 PDFs oficiales en `tests/load/pdfs/` | **Presentes, versionados y únicos** | `FIND-001`; `FIND-011` resuelto 2026-10-21 (el duplicado era `heavy.292.pdf` en el Extractor, ya eliminado) |
 | `pdf-extractext.localhost` resuelve a 127.0.0.1 | No verificado | README requiere ajuste manual en WSL/glibc |
 | Suite de registro (`record-run.sh`) | Presente | `scripts/record-run.sh`; `docs/test-runs/` con `TEMPLATE.md` versionado + 5 corridas locales (gitignoreadas) |
 | Réplicas de Extraction configurables 1–5 | Verificado (código) | `Makefile:check` valida el rango antes de `make up` |

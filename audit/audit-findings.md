@@ -277,9 +277,9 @@ Taxonomía: `[VERIFICADO-CÓDIGO]`, `[VERIFICADO-PRUEBA]`, `[DOCUMENTADO-NO-VERI
 | **Impacto** | Dos de los 4 targets de Vegeta apuntan al mismo contenido pesado; comparación con la referencia del TP inválida. |
 | **Descubrimiento** | Hashes de los 4 PDFs durante la re-verificación. |
 | **Causa raíz** | `RC-006` |
-| **Acción** | Reemplazar por el documento oficial real y verificar hashes (`ASK-009`). |
-| **Estado** | Abierto |
-| **Restricciones** | No se modificaron datos de prueba. |
+| **Acción** | **Resuelta 2026-10-21:** se eliminó `heavy.292.pdf` del Extractor (junto con su suite de carga); el corpus de Infrastructure, con 4 hashes únicos, es la única fuente oficial (`ASK-009`). |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` |
+| **Restricciones** | El corpus de Infrastructure no se modificó. |
 
 ### FIND-012
 
