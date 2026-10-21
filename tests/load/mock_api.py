@@ -18,7 +18,12 @@ NAMES = [
 ]
 FIXTURES = {n: (FIXDIR / n).read_bytes() for n in NAMES}
 DIGESTS = {n: hashlib.sha256(b).hexdigest() for n, b in FIXTURES.items()}
-PAGES = {n: 0 for n in NAMES}
+PAGES = {
+    "2020-Scrum-Guide-Spanish-Latin-South-American.pdf": 16,
+    "Essential-Kanban-Condensed-Spanish.pdf": 90,
+    "Filosofia Lean.pdf": 42,
+    "scrum_manager_historias_usuario.pdf": 62,
+}
 state = {"hits": {n: 0 for n in NAMES}, "bad": 0, "no_file": 0}
 
 
