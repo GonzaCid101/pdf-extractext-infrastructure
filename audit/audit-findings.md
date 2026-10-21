@@ -41,6 +41,11 @@ Taxonomía: `[VERIFICADO-CÓDIGO]`, `[VERIFICADO-PRUEBA]`, `[DOCUMENTADO-NO-VERI
 | `RC-027` | Deuda de Clean Code heredada del bootstrap: IDs de issues en Dockerfiles/scripts y targets duplicados en Makefiles. | `FIND-042`, `FIND-046` | Resuelta / diferida a Etapa 4 (2026-10-20) | `[VERIFICADO-CÓDIGO]` |
 | `RC-028` | Endurecimiento de imágenes/.dockerignore definido por repo, sin estándar mínimo común (digests, USER, exclusiones). | `FIND-043`, `FIND-044` | Resuelta/aceptada (2026-10-20) | `[VERIFICADO-CÓDIGO]` |
 | `RC-029` | El estado del host se apartó de lo declarado (Traefik del proyecto sin red/puertos; Traefik ajeno reteniendo 80/443) sin registro. | `FIND-045` | Resuelta (2026-10-20) | `[VERIFICADO-PRUEBA]` |
+| `RC-030` | Los scripts de carga se escribieron contra una versión de Vegeta anterior a v12 (`>=12.8`), que ya no acepta el body embebido en targets `http`; las herramientas nunca se instalaron en el host, así que el fallo no se detectó. | `FIND-048` | Abierta (Etapa 4) | `[VERIFICADO-PRUEBA]` |
+| `RC-031` | `run_k6.sh` usa `--summary-export`, retirado en k6 v2.x; el resumen nunca se genera y el wrapper silencia la ausencia devolviendo ceros. | `FIND-049` | Abierta (Etapa 4) | `[VERIFICADO-CÓDIGO]` |
+| `RC-032` | El host de la Etapa 4 carece de soporte AVX; MongoDB 5.0+ (imagen `mongo:8` fijada en D7) no arranca, bloqueando el stack y las corridas. | `FIND-052` | Abierta (Etapa 4) | `[VERIFICADO-PRUEBA]` |
+| `RC-033` | `run_k6.sh` no exportaba `BASE_URL` derivado de `TARGET_URL`; k6 usaba su default y la perilla de destino era ignorada. | `FIND-053` | Resuelta (Etapa 4) | `[VERIFICADO-PRUEBA]` |
+| `RC-034` | `mock_api.py` hardcodeaba `page_count: 0`, incompatible con el check `page_count > 0` de k6. | `FIND-054` | Resuelta (Etapa 4) | `[VERIFICADO-PRUEBA]` |
 
 ---
 
@@ -98,16 +103,16 @@ Taxonomía: `[VERIFICADO-CÓDIGO]`, `[VERIFICADO-PRUEBA]`, `[DOCUMENTADO-NO-VERI
 | **Categoría** | rendimiento / configuración |
 | **Severidad** | Alta |
 | **Repositorio** | `pdf-extractext-infrastructure` |
-| **Ubicación** | `Makefile:57-58` → `tests/load/run_k6.sh:21` → `tests/load/spike_tests.js:8-12` (stages `target: 1`); `k6-spike.js` (100 VUs) eliminado el 2026-10-18. |
-| **Descripción** | El README describe "spike 10s→100 VUs" pero `spike_tests.js` sube a 1 VU. Decisión del equipo: `spike_tests.js` es el canónico; las stages de 100 VUs se implementan al final del ciclo. |
-| **Evidencia** | `run_k6.sh:21` ejecuta `spike_tests.js`; `spike_tests.js:9-11`: `target: 1`; `k6-spike.js` no referenciado (eliminado). |
-| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
-| **Impacto** | El benchmark cableado no reproduce el escenario del TP (100 VUs). |
+| **Ubicación** | `Makefile:57-58` → `tests/load/run_k6.sh` → `tests/load/spike_tests.js` (stages 100 VUs); `k6-spike.js` (100 VUs) eliminado el 2026-10-18. |
+| **Descripción** | El README describe "spike 10s→100 VUs" pero `spike_tests.js` subía a 1 VU. Decisión del equipo: `spike_tests.js` es el canónico; las stages de 100 VUs se implementan al final del ciclo. |
+| **Evidencia** | **Corrección 2026-10-21:** `spike_tests.js` con stages `10s→100, 20s→100, 10s→0` parametrizables por `TARGET_VUS`; `k6 inspect` confirma `target: 100` (y `10` con `-e TARGET_VUS=10`). Validado contra `tests/load/mock_api.py` (8 reqs, `extract_ok` 100 %, p50/p90/p95 no-cero). La **medición real** sobre el stack queda pendiente (`FIND-052`). |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` + `[VERIFICADO-PRUEBA]` (mock oficial) |
+| **Impacto** | El benchmark cableado ahora reproduce el escenario del TP (100 VUs). |
 | **Descubrimiento** | Lectura cruzada Makefile → scripts k6 vs enunciado. |
 | **Causa raíz** | `RC-003` |
-| **Acción** | Implementar stages 100 VUs en `spike_tests.js` al corregir perfiles (`ASK-003` resuelta). |
-| **Estado** | Abierto (perfil pendiente) |
-| **Restricciones** | Corrección pospuesta a la etapa final de benchmarks. |
+| **Acción** | Hecho: stages 100 VUs implementadas y validadas contra mock. Falta la corrida real (`FIND-052`). |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-21; lógica del perfil validada contra mock; cifras reales pendientes, `FIND-052`) |
+| **Restricciones** | Corrida real bloqueada por AVX (`FIND-052`). |
 
 ### FIND-004
 
@@ -182,16 +187,16 @@ Taxonomía: `[VERIFICADO-CÓDIGO]`, `[VERIFICADO-PRUEBA]`, `[DOCUMENTADO-NO-VERI
 | **Categoría** | rendimiento / configuración |
 | **Severidad** | Alta (30 reqs en 30 s vs 1.500 esperados) |
 | **Repositorio** | `pdf-extractext-infrastructure` |
-| **Ubicación** | `tests/load/vegeta/run_vegeta.sh:21` (`RATE="1/s"`) vs `:71` (`-rate="$RATE"`); README `:76`; D11 `:71` |
-| **Descripción** | `RATE` está hardcoded a `1/s` (sin default sobreescribible), mientras script, README y ADR documentan 50 req/s. Decisión del equipo: corregir el rate a `50/s` en la etapa final. |
-| **Evidencia** | `run_vegeta.sh:21` `RATE="1/s"`; `:71-72` lo pasa a `vegeta attack`; README/D11 documentan 50 req/s. |
-| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
-| **Impacto** | Corridas no comparables con la referencia del TP (1.500 reqs, 501 timeouts). |
+| **Ubicación** | `tests/load/vegeta/run_vegeta.sh` (`RATE`/`-rate`); README `:76`; D11 `:71` |
+| **Descripción** | `RATE` estaba hardcoded a `1/s` (sin default sobreescribible), mientras script, README y ADR documentan 50 req/s. |
+| **Evidencia** | **Corrección 2026-10-21:** `RATE="${RATE:-50/s}"`, `DURATION="${DURATION:-30s}"`, `TIMEOUT="${TIMEOUT:-30s}"`. Objetivo 50×30 = 1.500 reqs. Validado contra `tests/load/mock_api.py` (30 reqs a 10/s, éxito 100 %, `bad:0`) y contra stub local a 50/s (150/150 reqs en 3 s). La medición real pendiente (`FIND-052`). |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` + `[VERIFICADO-PRUEBA]` (mock oficial) |
+| **Impacto** | Corridas comparables con la referencia del TP (1.500 reqs). |
 | **Descubrimiento** | Contraste comentario/README/ADR vs valor de `RATE`. |
 | **Causa raíz** | `RC-003` |
-| **Acción** | Corregir a `50/s` en la etapa final de benchmarks. |
-| **Estado** | Abierto (corrección diferida) |
-| **Restricciones** | Prioridad: funcionamiento correcto primero. |
+| **Acción** | Hecho: rate corregido a 50/s y validado contra mock. Falta corrida real (`FIND-052`). |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-21; perfil validado contra mock; cifras reales pendientes, `FIND-052`) |
+| **Restricciones** | Corrida real bloqueada por AVX (`FIND-052`). |
 
 ### FIND-008
 
@@ -1032,3 +1037,150 @@ Taxonomía: `[VERIFICADO-CÓDIGO]`, `[VERIFICADO-PRUEBA]`, `[DOCUMENTADO-NO-VERI
 | **Acción** | Medir en Etapa 4 con k6 100 VUs (`docker stats`/OOMKilled); si hay OOM, decidir entre subir la memoria de la API o limitar concurrencia en el borde (reabre `ASK-010`). |
 | **Estado** | Abierto — `[DECISIÓN-PENDIENTE]` condicionada a la medición |
 | **Restricciones** | No se ejecutó carga (restricción del equipo). |
+
+### FIND-048
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-048` |
+| **Título** | Los targets de Vegeta están en formato `http` con body embebido, que Vegeta v12 rechaza → el ataque envía 0 peticiones |
+| **Etapa** | Etapa 4 (2026-10-20) |
+| **Categoría** | testing / validez del benchmark |
+| **Severidad** | **Alta** (invalida por completo la corrida de carga abierta del TP) |
+| **Repositorio** | `pdf-extractext-infrastructure` |
+| **Ubicación** | `tests/load/vegeta/run_vegeta.sh:53-59` (target en formato `http`) y `:64` (`vegeta attack` sin `-format`); formato objetivo en `lib/targets.go` de Vegeta (`NewHTTPTargeter` exige la primera línea con método en mayúsculas y body solo vía `@ruta`) |
+| **Descripción** | El script emite cada target como `POST <url>` + cabeceras + línea en blanco + **body multipart embebido**. Vegeta ≥ 12.8 lee targets en modo JSON (`{method,url,header,body(base64)}`); en modo `http` la primera línea no vacía debe empezar con un método HTTP y el body solo se admite con `@/ruta`. La línea `--pdf-extractext-vegeta-boundary` no encaja → el ataque aborta. |
+| **Evidencia** | Reproducción del comando literal del repo contra un stub local: `vegeta attack -targets=work/targets.txt …` → `bad target: --pdf-extractext-vegeta-boundary`, exit 1, **0 peticiones**. Reproducción equivalente en `-format=json` (mismo multipart, body base64) → **6/6 peticiones, 200 OK**, multipart válido, `Content-Length` == bytes reales. Las mismas líneas del script (`:45-49`) generan el multipart correcto. |
+| **Taxonomía** | `[VERIFICADO-PRUEBA]` |
+| **Impacto** | `make load-vegeta` y cualquier corrida de carga abierta fallan antes de medir; no hay métricas de Vegeta válidas ni comparables con el TP. |
+| **Descubrimiento** | Etapa 4, validación acotada de sintaxis de targets con `vegeta` v12.13 contra stub local. |
+| **Causa raíz** | `RC-030` |
+| **Acción** | Reescribir los targets en `-format=json` (body base64) **o** pasar el body con `@/ruta` al fichero multipart; verificar con una corrida corta contra el stack. |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-21): reescrito a `-format=json` con body base64 (`--rawfile`); validado contra `tests/load/mock_api.py` (150 reqs a 50/s y 30 a 10/s; `bad:0`, `no_file:0`; multipart aceptado por el mock que verifica SHA256). La corrida real queda pendiente (`FIND-052`). |
+| **Restricciones** | Corrida real bloqueada por AVX (`FIND-052`). |
+
+### FIND-049
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-049` |
+| **Título** | `run_k6.sh` usa `--summary-export` retirado en k6 v2.x → resumen no generado y métricas a 0 |
+| **Etapa** | Etapa 4 (2026-10-20) |
+| **Categoría** | testing / instrumentación |
+| **Severidad** | Media (la corrida ocurre, pero las métricas capturadas son nulas) |
+| **Repositorio** | `pdf-extractext-infrastructure` |
+| **Ubicación** | `tests/load/run_k6.sh:21` (`--summary-export="$SUMMARY"`), `:23-38` (parseo del JSON); k6 instalado = **v2.3.0** |
+| **Descripción** | k6 v2.3.0 ya no documenta `--summary-export` (sustituido por `handleSummary()`), por lo que `$SUMMARY` no se crea y `stat_ms`/throughput/success devuelven 0 silenciosamente. |
+| **Evidencia** | `k6 run --help` en v2.3.0 no lista `--summary-export` (sí `--summary-mode`/`--new-machine-readable-summary`); el wrapper `|| 0` oculta la ausencia de `$SUMMARY`. `k6 inspect tests/load/spike_tests.js` confirma que el escenario se carga pero con `target: 1` (ver `FIND-003`). |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | Aunque el spike corra, p50/p90/p95/throughput/%éxito registrados son 0; las corridas de k6 no aportan métricas al informe. |
+| **Descubrimiento** | Etapa 4, `k6 inspect` + `k6 run --help`. |
+| **Causa raíz** | `RC-031` |
+| **Acción** | Implementar `handleSummary()` en `spike_tests.js` (escribe el JSON con `--out` o en `teardown`) y ajustar el parseo del wrapper; comprobar la versión de k6 con fail-fast. |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-21): `handleSummary()` escribe el JSON en `K6_SUMMARY_PATH`; `run_k6.sh` parsea `.metrics.*.values.*` y muestra p50/p90/p95/p99. Validado contra `tests/load/mock_api.py` (8 reqs, `extract_ok` 100 %, métricas no-cero; claves `med`/`p(90)`/`p(95)`/`p(99)` confirmadas). La corrida real queda pendiente (`FIND-052`). |
+| **Restricciones** | Corrida real bloqueada por AVX (`FIND-052`). |
+
+### FIND-050
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-050` |
+| **Título** | Corpus de carga con disparidad de coste ×28 y sin caso de imagen escaneada |
+| **Etapa** | Etapa 4 (2026-10-20) |
+| **Categoría** | testing / validez del benchmark |
+| **Severidad** | Media |
+| **Repositorio** | `pdf-extractext-infrastructure` |
+| **Ubicación** | `tests/load/pdfs/` (4 PDFs); `tests/load/spike_tests.js:27` (rotación aleatoria), `tests/load/vegeta/run_vegeta.sh:42` (round-robin) |
+| **Descripción** | El PDF más caro (Kanban, 8,5 MB/90p/91 imágenes) cuesta ~28× el más barato (Scrum Guide, 319 KB/16p/0 imágenes). La rotación mezcla ambos en el mismo conjunto de percentiles, y ningún PDF es escaneado (todos texto nativo, ninguno cifrado), así que no se ejercita ese camino del extractor. |
+| **Evidencia** | `pdfinfo`/`pdfimages -list`/`pdftotext` (2026-10-20): 16/90/42/62 páginas; 0/91/21/40 imágenes; 35.345/125.211/59.089/91.228 caracteres. |
+| **Taxonomía** | `[VERIFICADO-PRUEBA]` |
+| **Impacto** | Los percentiles no representan un perfil homogéneo; la varianza del corpus contamina la comparación entre corridas y con la referencia del TP. |
+| **Descubrimiento** | Etapa 4, caracterización del corpus. |
+| **Causa raíz** | `RC-006` / `FIND-011` |
+| **Acción** | Documentar el corpus efectivo (3 hashes) en cada corrida y/o añadir un PDF escaneado y un peso intermedio; o separar métricas por PDF. |
+| **Estado** | Abierto — `[RECOMENDACIÓN]` |
+| **Restricciones** | Solo lectura del corpus; no se alteraron datos de prueba (restricción 3). |
+
+### FIND-051
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-051` |
+| **Título** | Las suites de carga no capturan instrumentación de infraestructura (CPU/mem/OOM/reinicios/réplicas) |
+| **Etapa** | Etapa 4 (2026-10-20) |
+| **Categoría** | testing / observabilidad |
+| **Severidad** | Media (limita la atribución de causas, no invalida el resultado) |
+| **Repositorio** | `pdf-extractext-infrastructure` |
+| **Ubicación** | `tests/load/run_k6.sh`, `tests/load/vegeta/run_vegeta.sh`, `scripts/record-run.sh:78-119` (solo extrae límites estáticos, no uso en vivo) |
+| **Descripción** | Los scripts solo persisten la salida del cliente. No hay recolección de `docker stats` (CPU/mem), `OOMKilled`/`RestartCount`, estado de healthcheck durante la carga ni distribución de peticiones entre réplicas de Extraction. |
+| **Evidencia** | Lectura de los tres scripts; `record-run.sh` consulta `docker inspect` para límites/versiones, nunca uso en vivo durante el ataque. |
+| **Taxonomía** | `[VERIFICADO-CÓDIGO]` |
+| **Impacto** | `HYP-07` (RSS/OOM de Extraction), `FIND-047` (OOM de API), `HYP-08` (healthcheck) y `FIND-035` (SPOF Traefik) no se pueden validar con lo que capturan los scripts actuales. |
+| **Descubrimiento** | Etapa 4, revisión de instrumentación. |
+| **Causa raíz** | — (limitación de diseño de la suite) |
+| **Acción** | Añadir al protocolo de ejecución (§6.6 de `audit-benchmark.md`) la captura paralela de `docker stats --no-stream` y `docker inspect` de estado, y adjuntarla al registro de la corrida. |
+| **Estado** | Abierto — `[RECOMENDACIÓN]` |
+| **Restricciones** | No se ejecutaron cargas (restricción 6). |
+
+### FIND-052
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-052` |
+| **Título** | El host de benchmarks no soporta AVX: `mongo:8` (D7) no arranca → el stack no se levanta y las corridas reales no pueden ejecutarse |
+| **Etapa** | Etapa 4 (2026-10-21) |
+| **Categoría** | operabilidad / entorno |
+| **Severidad** | **Alta** (bloquea la ejecución de los benchmarks de la Etapa 4) |
+| **Repositorio** | `pdf-extractext-infrastructure` (entorno del host) |
+| **Ubicación** | `docker-compose.yml` (servicio `mongodb`, `MONGO_IMAGE=mongo:8` en `.env`); logs: `docker compose logs mongodb` |
+| **Descripción** | La CPU del host no expone el flag `avx` (`grep avx /proc/cpuinfo` sin resultados). MongoDB 5.0+ requiere AVX; el contenedor `mongo:8` aborta con `Illegal instruction (core dumped)` en el entrypoint y nunca pasa el healthcheck (`ping`), por lo que `depends_on: service_healthy` impide arrancar persistence/api/extraction. |
+| **Evidencia** | `make up` → `container pdf-extractext-mongodb-1 is unhealthy`, `make: *** Error 1`. Log: `WARNING: MongoDB 5.0+ requires a CPU with AVX support … Illegal instruction (core dumped) "${mongodHackedArgs[@]}" --fork`. `grep -m1 avx /proc/cpuinfo` → sin coincidencia. Imágenes locales: `mongo:8`, `mongo:7.0`, `mongo:4.4`; solo 4.4 es compatible con CPU sin AVX. |
+| **Taxonomía** | `[VERIFICADO-PRUEBA]` |
+| **Impacto** | No se puede levantar el stack en este host; las corridas reales de k6/Vegeta y la telemetría de infraestructura (`docker stats`) quedan sin ejecutar. Los scripts sí quedan corregidos y validados contra stub. |
+| **Descubrimiento** | Etapa 4, intento de `EXTRACTION_REPLICAS=1 make up`. |
+| **Causa raíz** | `RC-032` |
+| **Acción** | Ejecutar los benchmarks en un host con AVX, o autorizar un override temporal `MONGO_IMAGE=mongo:4.4` (imagen ya descargada, compatible) sin modificar `.env`/compose. Requiere decisión del equipo (afecta D7). |
+| **Estado** | Abierto — `[DECISIÓN-PENDIENTE]` (el equipo optó por no levantar el stack en esta sesión) |
+| **Restricciones** | No se cambió `MONGO_IMAGE` ni ningún archivo del proyecto; stack detenido (`docker compose down`). |
+
+### FIND-053
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-053` |
+| **Título** | `run_k6.sh` declaraba `TARGET_URL` pero nunca la pasaba a k6: el spike siempre atacaba el dominio por defecto |
+| **Etapa** | Etapa 4 (2026-10-21) |
+| **Categoría** | testing / configuración |
+| **Severidad** | Media (impedía dirigir el ensayo a un mock/override; las corridas reales usaban el default) |
+| **Repositorio** | `pdf-extractext-infrastructure` |
+| **Ubicación** | `tests/load/run_k6.sh` (uso de `TARGET_URL`) vs `tests/load/spike_tests.js:21` (`BASE_URL`) |
+| **Descripción** | El runner aceptaba `TARGET_URL` pero solo lo usaba para la descripción del registro; k6 construye `${BASE_URL}/extract` y `BASE_URL` no se exportaba, por lo que cualquier `TARGET_URL` era ignorado silenciosamente (el ensayo con `RECORD=0 TARGET_URL=<mock>` golpeaba `https://pdf-extractext.localhost`). Detectado al validar contra el mock. |
+| **Evidencia** | Antes: `RECORD=0 TARGET_URL=http://127.0.0.1:8642/extract bash run_k6.sh` → k6 intentaba `https://pdf-extractext.localhost/extract` (`connection refused`), `extract_ok` 0 %. Después: se deriva `BASE_URL="${BASE_URL:-${TARGET_URL%/extract}}"` y se exporta → 8 reqs al mock, `extract_ok` 100 %, `bad:0`. |
+| **Taxonomía** | `[VERIFICADO-PRUEBA]` (mock oficial) |
+| **Impacto** | Corregido: `TARGET_URL` es ahora la única perilla de destino en k6. |
+| **Descubrimiento** | Validación contra `tests/load/mock_api.py` (2026-10-21). |
+| **Causa raíz** | `RC-033` |
+| **Acción** | Hecho: derivar y exportar `BASE_URL` desde `TARGET_URL`. |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-21) |
+| **Restricciones** | — |
+
+### FIND-054
+
+| Campo | Valor |
+|---|---|
+| **ID** | `FIND-054` |
+| **Título** | `mock_api.py` devolvía `page_count: 0`, por lo que el check de k6 (`page_count > 0`) nunca podía pasar contra el mock |
+| **Etapa** | Etapa 4 (2026-10-21) |
+| **Categoría** | testing / validez de la validación |
+| **Severidad** | Baja (solo afecta al ensayo con mock, no a la corrida real) |
+| **Repositorio** | `pdf-extractext-infrastructure` |
+| **Ubicación** | `tests/load/mock_api.py:21` (`PAGES = {n: 0 …}`), respuesta en `:72`; check en `spike_tests.js:44-52` |
+| **Descripción** | El mock (creado "para ensayar k6/Vegeta sin stack") respondía `page_count: 0`, de modo que el check `JSON con content y page_count` de k6 fallaba siempre aunque el multipart fuera correcto; `http_req_failed` 0 % pero `extract_ok` 0 %, un falso negativo que impedía validar el camino de éxito. |
+| **Evidencia** | Antes: 8 reqs al mock → `extract_ok` 0 %. Después de fijar los conteos reales (16/90/42/62, coherentes con la caracterización del corpus): `extract_ok` 100 %, `bad:0`, `no_file:0`. |
+| **Taxonomía** | `[VERIFICADO-PRUEBA]` |
+| **Impacto** | Corregido: el ensayo con mock ahora ejercita el camino de éxito completo. |
+| **Descubrimiento** | Validación contra `tests/load/mock_api.py` (2026-10-21). |
+| **Causa raíz** | `RC-034` |
+| **Acción** | Hecho: `PAGES` con los conteos reales de cada PDF. |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-21) |
+| **Restricciones** | Solo afecta a la herramienta de ensayo; no toca API/Extraction/Persistence. |

@@ -19,8 +19,8 @@ Carpeta autorizada: `pdf-extractext-infrastructure/audit/` (único lugar válido
 | Etapa 3A | Auditoría del microservicio de extracción (Área B) | **COMPLETADA (2026-10-19); CORRECCIONES APLICADAS (2026-10-19)** | `pdf-extractext-extractor` + interfaz con API inspeccionados en profundidad: algoritmo/Markdown, memoria, concurrencia/workers, errores y backpressure. Nuevos `FIND-016`…`FIND-022`, `RC-010`…`RC-015`, `HYP-07`…`HYP-09`. La auditoría fue solo inspección + sondas locales (ya eliminadas); la fase de correcciones aprobada (Bloque A + B1) resolvió `FIND-016`…`FIND-018`, `FIND-021`, `FIND-022` y parcialmente `FIND-019` (§8, C-27…C-30). |
 | Etapa 3B | Auditoría de API, orquestación y persistencia (Área C) | **COMPLETADA (2026-10-19); CORRECCIONES APLICADAS (2026-10-19)** | `pdf-extractext-api` + `pdf-extractext-persistence` inspeccionados: orquestación, cliente HTTP, memoria/BodyLimit, backpressure, Mongo/índices, idempotencia, fallos parciales y Clean Code. Nuevos `FIND-023`…`FIND-031`, `RC-016`…`RC-019`, `ASK-010`…`ASK-013`. La fase de correcciones aprobada resolvió `FIND-023`…`FIND-031` (§8, C-35…C-40). |
 | Etapa 3C | Infraestructura (Dockerfile, Twelve-Factor, seguridad de contenedores) y suites de tests | **COMPLETADA (2026-10-19)** | `docker-compose.yml`, Makefile, Traefik, scripts, `.env.example`, los 3 Dockerfiles y las 4 suites inspeccionados + estado runtime del stack. Nuevos `FIND-032`…`FIND-047`, `RC-020`…`RC-029`, `ASK-014`…`ASK-018`. Hallazgo crítico de entorno: `FIND-045` (Traefik del proyecto desconectado; bloquea Etapa 4). Solo se modificaron documentos en `audit/` (§8, C-41…C-44). |
-| Etapa 4 | (definida por el equipo) | PENDIENTE | — |
-| Etapa 5 | Cierre y reporte final | PENDIENTE | — |
+| Etapa 4 | Auditoría de pruebas de carga y validez del benchmark (Área E) | **COMPLETADA — IMPLEMENTADA, VALIDACIÓN PENDIENTE (2026-10-21)** | Scripts k6/Vegeta, runners y corpus inspeccionados; `FIND-048`…`FIND-051`, `RC-030`/`RC-031`. 2026-10-21: scripts corregidos y validados contra stub (`FIND-003`/`FIND-007`/`FIND-048`/`FIND-049` → `[IMPLEMENTADO - PENDIENTE DE VALIDACIÓN]`). Corridas reales **bloqueadas** por `FIND-052` (host sin AVX). Ver `audit-benchmark.md` §6/§6.7. |
+| Etapa 5 | Cierre y reporte final | PENDIENTE (no iniciada) | — |
 
 ---
 
@@ -384,3 +384,46 @@ Sesión aprobada por el equipo (resolución de `ASK-014`…`ASK-018`). Cierra lo
 - Borde público: `https://traefik.pdf-extractext.localhost/api/overview` → **404**; `:8090` interno → **200**; `https://pdf-extractext.localhost/` (API) → **200**.
 
 **Estado de los hallazgos (tras esta fase, 2026-10-20):** resueltos `FIND-032`…`FIND-034`, `FIND-036`, `FIND-038`…`FIND-043`; cerrados por diseño y documentados en el ADR `FIND-035`, `FIND-037`, `FIND-044`; `FIND-045` resuelto (stack restaurado y verificado). Diferidos a la Etapa 4: `FIND-046`, `FIND-047` (con `FIND-003`/`FIND-007`/`FIND-011`).
+
+### Etapa 4 — Auditoría de pruebas de carga y validez del benchmark (Área E), 2026-10-20
+
+Inspección de **solo lectura** de los scripts de k6/Vegeta, los runners y el corpus. Validaciones acotadas sin ejecutar cargas sobre los servicios: `k6 inspect` y reproducción de los targets de Vegeta contra un stub local de un solo uso en `/tmp/opencode/` (ya detenido). **No se modificó** ningún archivo del proyecto (los 4 repos con `git status` limpio salvo `audit/`).
+
+| # | Repositorio | Archivo | Tipo | Descripción del cambio | Hallazgo / decisión |
+|---|---|---|---|---|---|
+| C-52 | `pdf-extractext-infrastructure` | `audit/audit-benchmark.md` | doc | §6 nueva: caracterización del corpus, tablas Consigna vs implementación (k6/Vegeta), matriz de sesgos (B1–B9), huecos de instrumentación y **protocolo de ejecución reproducible (§6.6)**; §2.1 anotada con `FIND-048`/`FIND-049`; §1 con la re-verificación de PDFs | Etapa 4 |
+| C-53 | `pdf-extractext-infrastructure` | `audit/audit-findings.md` | doc | Nuevos `FIND-048`…`FIND-051` (16 campos) y causas raíz `RC-030`/`RC-031` | Etapa 4 |
+| C-54 | `pdf-extractext-infrastructure` | `audit/audit-master.md` | doc | Etapa 4 marcada completada | Etapa 4 |
+
+**Verificación ejecutada (2026-10-20):**
+- `k6 inspect tests/load/spike_tests.js` → stages 10s→**1 VU**, 20s, 10s→0 (no 100 VUs del TP).
+- Reproducción del comando **literal** de `run_vegeta.sh` (formato `http`) contra stub local → `bad target: --pdf-extractext-vegeta-boundary`, exit 1, **0 peticiones** (`FIND-048`). Equivalente en `-format=json` (body base64) → **6/6 peticiones 200**, multipart válido y `Content-Length` exacto.
+- Caracterización del corpus con `pdfinfo`/`pdfimages`/`pdftotext`/`sha256sum`: 16/90/42/62 páginas, todos con texto nativo, ninguno cifrado, Kanban ≡ `heavy.292.pdf` (`FIND-011`).
+- Stack **sin levantar** (`docker compose ps` vacío); `k6` instalado (v2.3.0), `vegeta` no (instalado en `~/go/bin` solo para validar sintaxis).
+
+**Estado de los hallazgos (tras la Etapa 4, 2026-10-20):**
+- Abiertos de cargas: `FIND-003`, `FIND-007`, `FIND-011`, `FIND-046`, `FIND-047` **más los nuevos `FIND-048`…`FIND-051`**.
+- `FIND-048` (Alta) y `FIND-049` (Media) bloquean/contaminan la validez del benchmark; `FIND-050`/`FIND-051` son de validez/observabilidad.
+- **Conclusión:** con los scripts actuales el benchmark del TP **no se reproduce** (Vegeta no envía nada; k6 mide 1 VU y no exporta métricas). El diseño de los escenarios (multipart, timeout 30 s, rotación) sí es apto una vez corregidos los `FIND-*` anteriores.
+
+### Etapa 4 — Corrección de scripts de carga y sesión de ejecución, 2026-10-21
+
+Autorizada por el equipo la corrección de los scripts de carga. Se corrigen los runners y se validan contra el **mock oficial del repo** (`tests/load/mock_api.py`, que verifica multipart y SHA256) y un stub local de un solo uso en `/tmp/opencode/bt/` (ambos detenidos; sin carga contra servicios del proyecto). La corrida real sobre el stack quedó **bloqueada por `FIND-052`** (host sin AVX → `mongo:8` no arranca).
+
+| # | Repositorio | Archivo | Tipo | Descripción del cambio | Hallazgo / decisión |
+|---|---|---|---|---|---|
+| C-55 | `pdf-extractext-infrastructure` | `tests/load/spike_tests.js` | código | Stages `10s→100, 20s→100, 10s→0` (parametrizable `TARGET_VUS`), `sleep(0.5)`, `summaryTrendStats` con percentiles, `handleSummary()` → `K6_SUMMARY_PATH`, `BASE_URL` env | `FIND-003`, `FIND-049` `[RESUELTO - IMPLEMENTADO]` |
+| C-56 | `pdf-extractext-infrastructure` | `tests/load/run_k6.sh` | código | Quitado `--summary-export`; parseo de `.metrics.*.values.*` (k6 v2.x); `TARGET_VUS` override; **`BASE_URL` derivado de `TARGET_URL`** (`FIND-053`); resumen con p50/p90/p95 | `FIND-049` `[RESUELTO - IMPLEMENTADO]`, `FIND-053` `[RESUELTO - IMPLEMENTADO]` |
+| C-57 | `pdf-extractext-infrastructure` | `tests/load/vegeta/run_vegeta.sh` | código | `RATE=${RATE:-50/s}` (`DURATION`/`TIMEOUT` override); targets `-format=json` con body base64 (`--rawfile`); binario en PATH o `$HOME/go/bin`; `KEEP_RESULTS` corregido (timestamp, sin `TOOL_STAMP`) | `FIND-048`, `FIND-007` `[RESUELTO - IMPLEMENTADO]` |
+| C-58 | `pdf-extractext-infrastructure` | `audit/audit-findings.md` | doc | `FIND-003`/`FIND-007`/`FIND-048`/`FIND-049` a `[RESUELTO - IMPLEMENTADO]`; nuevos `FIND-052`…`FIND-054` + `RC-032`…`RC-034` | Etapa 4 (correcciones) |
+| C-59 | `pdf-extractext-infrastructure` | `audit/audit-benchmark.md` | doc | §6.6 con Fase 1 aplicada; §6.7 nueva (tabla de cambios + validaciones contra mock + chequeos negativos + bloqueo) | Etapa 4 (correcciones) |
+| C-60 | `pdf-extractext-infrastructure` | `docs/informe_tecnico.md` | doc | §4: estado real (scripts ejecutables, corridas no medidas por `FIND-052`); tablas siguen vacías por diseño | `FIND-008` |
+| C-61 | `pdf-extractext-infrastructure` | `tests/load/mock_api.py` | código | `PAGES` con los conteos reales (16/90/42/62) en vez de `0`; permite que el check de k6 ejercite el camino de éxito | `FIND-054` `[RESUELTO - IMPLEMENTADO]` |
+| C-62 | `pdf-extractext-infrastructure` | `README.md` | doc | Nota de perfiles corregidos (100 VUs / 50 req/s / formato JSON / `handleSummary`); overrides `TARGET_URL`/`TARGET_VUS`/`RATE`; remisión a `FIND-052` | Etapa 4 (correcciones) |
+| C-63 | `pdf-extractext-infrastructure` | `docs/test-runs/2026-10-21-sin-corrida-bloqueo-avx.md` | doc | Registro de la sesión sin corrida (no versionado: `.gitignore`), con el motivo `FIND-052` y las validaciones contra mock | Etapa 4 (correcciones) |
+
+**Verificación ejecutada (2026-10-21):** `bash -n` OK en ambos `.sh`; `k6 inspect` → `target: 100` (y `10` con `-e TARGET_VUS=10`); k6 contra mock → 8 reqs, `extract_ok` **100 %**, p50/p90/p95 no-cero, JSON de `handleSummary` con claves `med`/`p(90)`/`p(95)`/`p(99)`; Vegeta contra mock → 30 reqs a 10/s y 150 a 50/s, `bad:0`/`no_file:0`, 4 tamaños de PDF (round-robin); chequeos negativos (`RECORD=1` sin stack → exit 1; destino caído → sin abortar). `EXTRACTION_REPLICAS=1 make up` → **falla** (`mongo:8`, `Illegal instruction`); stack detenido con `docker compose down`.
+
+**Estado de los hallazgos (tras esta fase, 2026-10-21):** `FIND-003`, `FIND-007`, `FIND-048`, `FIND-049` → `[RESUELTO - IMPLEMENTADO]` (lógica de los scripts validada contra mock); `FIND-053`/`FIND-054` → `[RESUELTO - IMPLEMENTADO]` (nuevos). `FIND-052` (`[DECISIÓN-PENDIENTE]`, bloqueante de entorno) + `RC-032`…`RC-034`. Siguen abiertos `FIND-011`, `FIND-046`, `FIND-047`, `FIND-050`, `FIND-051`. **No se avanzó a la Etapa 5.**
+
+**Pendientes para cerrar la Etapa 4:** (1) ejecutar los benchmarks en un host con AVX (o autorizar `MONGO_IMAGE=mongo:4.4` temporal); (2) registrar resultados en `docs/test-runs/` y completar las tablas de `informe_tecnico.md` §4 con datos reales; (3) resolver `FIND-011` (corpus de 3 hashes).
