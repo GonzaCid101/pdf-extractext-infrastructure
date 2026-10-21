@@ -6,8 +6,11 @@ GET / responde 200 (readiness).
 import hashlib
 import json
 import re
+import tempfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+
+DUMP_PATH = Path(tempfile.gettempdir()) / "pdf-extractext-mock-hits.json"
 
 FIXDIR = Path(__file__).resolve().parent / "pdfs"
 NAMES = [
@@ -28,7 +31,8 @@ state = {"hits": {n: 0 for n in NAMES}, "bad": 0, "no_file": 0}
 
 
 def dump():
-    with open("/tmp/opencode/mock-hits.json", "w") as f:
+    DUMP_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(DUMP_PATH, "w") as f:
         json.dump(state, f)
 
 
