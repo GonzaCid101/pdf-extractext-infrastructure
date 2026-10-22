@@ -35,6 +35,7 @@ services:
       - "8000" # entrypoint público vía Traefik; no se publica al host
     environment:
       EXTRACTION_URL: ${EXTRACTION_URL:-http://traefik:8090}
+      EXTRACTION_HOST: ${EXTRACTION_HOST:-extraction.pdf-extractext.localhost}
       PERSISTENCE_URL: ${PERSISTENCE_URL:-http://persistence:8002}
       MAX_FILE_SIZE_MB: "${MAX_FILE_SIZE_MB:-16}"
     deploy:
