@@ -14,10 +14,10 @@ Taxonomía: `[VERIFICADO-CÓDIGO]`, `[VERIFICADO-PRUEBA]`, `[DOCUMENTADO-NO-VERI
 |---|---|---|---|---|
 | `RC-001` | Los PDFs oficiales nunca se versionaron (`.gitignore` desalineado con el README). | `FIND-001`, `FIND-002` | Resuelta (2026-10-18) | `[VERIFICADO-CÓDIGO]` |
 | `RC-002` | READMEs y ADRs no se actualizaron tras la implementación posterior al bootstrap. | `FIND-004`, `FIND-006` | Resuelta (2026-10-17/18) | `[VERIFICADO-CÓDIGO]` |
-| `RC-003` | Dos suites de carga sin script canónico definido. | `FIND-003`, `FIND-007` | Abierta (perfiles al final del ciclo) | `[VERIFICADO-CÓDIGO]` |
-| `RC-004` | El informe técnico se redactó con datos simulados y no se reemplazaron. | `FIND-008` | Resuelta (2026-10-18) | `[VERIFICADO-CÓDIGO]` |
+| `RC-003` | Dos suites de carga sin script canónico definido. | `FIND-003`, `FIND-007` | Resuelta (2026-10-21): perfil único en Infrastructure (k6 100 VUs / Vegeta 50/s) | `[VERIFICADO-CÓDIGO]` |
+| `RC-004` | El informe técnico se redactó con datos simulados y no se reemplazaron. | `FIND-008` | Resuelta (2026-10-18); informe redactado completo 2026-10-22 | `[VERIFICADO-CÓDIGO]` |
 | `RC-005` | ADR/README/`.env.example` evolucionaron sin revisión cruzada. | `FIND-009`, `FIND-010` | Resuelta (2026-10-18) | `[VERIFICADO-CÓDIGO]` |
-| `RC-006` | El corpus de carga se armó sin verificar procedencia/hash (duplicado del PDF pesado). | `FIND-011` | Abierta | `[VERIFICADO-CÓDIGO]` |
+| `RC-006` | El corpus de carga se armó sin verificar procedencia/hash (duplicado del PDF pesado). | `FIND-011`, `FIND-050` | Resuelta (2026-10-21): 4 hashes únicos; disparidad documentada y operativa en el runbook | `[VERIFICADO-CÓDIGO]` |
 | `RC-007` | El cliente HTTP del API colapsaba cualquier status de upstream en error genérico. | `FIND-012`, `FIND-013` | Resuelta (API `fb3d7c3`) | `[VERIFICADO-PRUEBA]` |
 | `RC-008` | `persistence_client.go` no enviaba `X-Request-ID`. | `FIND-014` | Resuelta (API `fb3d7c3`) | `[VERIFICADO-PRUEBA]` |
 | `RC-009` | El 503 de saturación reutilizaba el code `INTERNAL_ERROR`. | `FIND-015` | Resuelta (extractor `627aecf`) | `[VERIFICADO-PRUEBA]` |
@@ -25,7 +25,7 @@ Taxonomía: `[VERIFICADO-CÓDIGO]`, `[VERIFICADO-PRUEBA]`, `[DOCUMENTADO-NO-VERI
 | `RC-011` | La extracción CPU-bound se ejecuta como código síncrono dentro del endpoint `async def` (un solo event loop). | `FIND-017` | Resuelta (2026-10-19) | `[VERIFICADO-CÓDIGO]` + `[VERIFICADO-PRUEBA]` |
 | `RC-012` | El mapeo de errores de PyMuPDF solo cubre `FileDataError`/`EmptyFileError`; el resto cae en el `except Exception` genérico. | `FIND-018` | Resuelta (2026-10-19) | `[VERIFICADO-PRUEBA]` |
 | `RC-013` | El límite defensivo acota solo el tamaño de entrada: sin límite de expansión, páginas ni tiempo. | `FIND-019` | Parcial (2026-10-19): spool liberado; límites pendientes | `[VERIFICADO-CÓDIGO]` |
-| `RC-014` | El contrato exige `extracted_text == content`: el Markdown viaja dos veces. | `FIND-020` | Resuelta (decisión de equipo: se conserva) | `[VERIFICADO-PRUEBA]` |
+| `RC-014` | El contrato exige `extracted_text == content`: el Markdown viaja dos veces. | `FIND-020` | Aceptada por diseño (2026-10-22): se conserva el contrato D14 | `[VERIFICADO-PRUEBA]` |
 | `RC-015` | Los defaults de arranque del extractor nunca se alinearon con la decisión medida del ADR 0002 (1 worker). | `FIND-021` | Resuelta (2026-10-19) | `[VERIFICADO-CÓDIGO]` |
 | `RC-016` | La API no tiene contrapresión propia: no limita tasa ni conexiones concurrentes hacia Extraction/Persistence. | `FIND-023` | Resuelta (decisión de equipo: backpressure en Extraction, ADR D10) | `[VERIFICADO-CÓDIGO]` |
 | `RC-017` | El cliente HTTP de la API usa el `DefaultTransport` de Go (2 conexiones inactivas por host): bajo carga no sostiene keep-alive y abre/destruye sockets. | `FIND-024` | Resuelta (2026-10-19) | `[VERIFICADO-CÓDIGO]` |
@@ -38,11 +38,11 @@ Taxonomía: `[VERIFICADO-CÓDIGO]`, `[VERIFICADO-PRUEBA]`, `[DOCUMENTADO-NO-VERI
 | `RC-024` | Nombres de proyecto/red y credenciales quedaron acoplados entre `traefik.yml`, compose y smoke, con defaults inconsistentes. | `FIND-037`, `FIND-038` | Resuelta/aceptada (2026-10-20) | `[VERIFICADO-CÓDIGO]` |
 | `RC-025` | Los scripts de verificación se escribieron para 1 réplica y no se actualizaron con la exigencia de escala 1–5. | `FIND-039` | Resuelta (2026-10-20) | `[VERIFICADO-CÓDIGO]` |
 | `RC-026` | La documentación pública no se actualizó al 100% tras 3A/3B (OpenAPI incompleto; README/env de API local con valores de arranque). | `FIND-040`, `FIND-041` | Resuelta (2026-10-20) | `[VERIFICADO-CÓDIGO]` |
-| `RC-027` | Deuda de Clean Code heredada del bootstrap: IDs de issues en Dockerfiles/scripts y targets duplicados en Makefiles. | `FIND-042`, `FIND-046` | Resuelta / diferida a Etapa 4 (2026-10-20) | `[VERIFICADO-CÓDIGO]` |
+| `RC-027` | Deuda de Clean Code heredada del bootstrap: IDs de issues en Dockerfiles/scripts y targets duplicados en Makefiles. | `FIND-042`, `FIND-046` | Resuelta (2026-10-20/22) | `[VERIFICADO-CÓDIGO]` |
 | `RC-028` | Endurecimiento de imágenes/.dockerignore definido por repo, sin estándar mínimo común (digests, USER, exclusiones). | `FIND-043`, `FIND-044` | Resuelta/aceptada (2026-10-20) | `[VERIFICADO-CÓDIGO]` |
 | `RC-029` | El estado del host se apartó de lo declarado (Traefik del proyecto sin red/puertos; Traefik ajeno reteniendo 80/443) sin registro. | `FIND-045` | Resuelta (2026-10-20) | `[VERIFICADO-PRUEBA]` |
-| `RC-030` | Los scripts de carga se escribieron contra una versión de Vegeta anterior a v12 (`>=12.8`), que ya no acepta el body embebido en targets `http`; las herramientas nunca se instalaron en el host, así que el fallo no se detectó. | `FIND-048` | Abierta (Etapa 4) | `[VERIFICADO-PRUEBA]` |
-| `RC-031` | `run_k6.sh` usa `--summary-export`, retirado en k6 v2.x; el resumen nunca se genera y el wrapper silencia la ausencia devolviendo ceros. | `FIND-049` | Abierta (Etapa 4) | `[VERIFICADO-CÓDIGO]` |
+| `RC-030` | Los scripts de carga se escribieron contra una versión de Vegeta anterior a v12 (`>=12.8`), que ya no acepta el body embebido en targets `http`; las herramientas nunca se instalaron en el host, así que el fallo no se detectó. | `FIND-048` | Resuelta (Etapa 4, 2026-10-21): targets reescritos a `-format=json` | `[VERIFICADO-PRUEBA]` |
+| `RC-031` | `run_k6.sh` usa `--summary-export`, retirado en k6 v2.x; el resumen nunca se genera y el wrapper silencia la ausencia devolviendo ceros. | `FIND-049` | Resuelta (Etapa 4, 2026-10-21): `handleSummary()` + parseo v2.x | `[VERIFICADO-CÓDIGO]` |
 | `RC-033` | `run_k6.sh` no exportaba `BASE_URL` derivado de `TARGET_URL`; k6 usaba su default y la perilla de destino era ignorada. | `FIND-053` | Resuelta (Etapa 4) | `[VERIFICADO-PRUEBA]` |
 | `RC-034` | `mock_api.py` hardcodeaba `page_count: 0`, incompatible con el check `page_count > 0` de k6. | `FIND-054` | Resuelta (Etapa 4) | `[VERIFICADO-PRUEBA]` |
 
@@ -466,8 +466,8 @@ Taxonomía: `[VERIFICADO-CÓDIGO]`, `[VERIFICADO-PRUEBA]`, `[DOCUMENTADO-NO-VERI
 | **Impacto** | ~2× de payload y de serialización; proporcional al documento. |
 | **Descubrimiento** | Medición de memoria/respuesta en la Etapa 3A. |
 | **Causa raíz** | `RC-014` |
-| **Acción** | Reabrir la decisión D14/INT-01 (un solo campo o campos a demanda). |
-| **Estado** | Abierto — `[DECISIÓN-PENDIENTE]` |
+| **Acción** | No se cambia: la decisión D14 (`DEC-14`) conserva `extracted_text == content` por compatibilidad del contrato con la API y el enunciado; el coste (~2× de payload) es aceptado y no afecta al benchmark de `/extract` (la API solo publica `content`). |
+| **Estado** | `[ACEPTADO POR DISEÑO]` (2026-10-22) — cierre de la Etapa 5: se mantiene el contrato, no se reabre D14. |
 | **Restricciones** | No se modifica el contrato acordado. |
 
 ### FIND-021
@@ -1013,7 +1013,7 @@ Taxonomía: `[VERIFICADO-CÓDIGO]`, `[VERIFICADO-PRUEBA]`, `[DOCUMENTADO-NO-VERI
 | **Descubrimiento** | Etapa 3C, revisión de scripts de carga. |
 | **Causa raíz** | `RC-027` |
 | **Acción** | Corregir `page_count`, errores `problem+json` y path de salida al retocar la suite de carga (etapa final). |
-| **Estado** | Abierto (diferido con `FIND-003`/`FIND-007`) |
+| **Estado** | `[RESUELTO - IMPLEMENTADO]` (2026-10-22): `PAGES` con los conteos reales de cada PDF (`FIND-054`); los errores legacy del mock quedan como utilidad de ensayo y no afectan a la corrida real (que ataca el stack, no el mock). |
 | **Restricciones** | No se ejecutó el mock (escribe en `/tmp`). |
 
 ### FIND-047
@@ -1096,8 +1096,8 @@ Taxonomía: `[VERIFICADO-CÓDIGO]`, `[VERIFICADO-PRUEBA]`, `[DOCUMENTADO-NO-VERI
 | **Impacto** | Los percentiles no representan un perfil homogéneo; la varianza del corpus contamina la comparación entre corridas y con la referencia del TP. |
 | **Descubrimiento** | Etapa 4, caracterización del corpus. |
 | **Causa raíz** | `RC-006` / `FIND-011` |
-| **Acción** | Documentar el corpus efectivo (3 hashes) en cada corrida y/o añadir un PDF escaneado y un peso intermedio; o separar métricas por PDF. |
-| **Estado** | Abierto — `[RECOMENDACIÓN]` |
+| **Acción** | Documentar el corpus efectivo (4 hashes) en cada corrida y/o añadir un PDF escaneado y un peso intermedio; o separar métricas por PDF. |
+| **Estado** | `[LISTO PARA MEDIR EN BENCHMARK]` (2026-10-22): el corpus ya tiene 4 hashes únicos (`FIND-011` resuelto) y la recomendación se operativa en el runbook (`audit-benchmark.md` §8): registrar el corpus efectivo y, si se desea, separar métricas por PDF. |
 | **Restricciones** | Solo lectura del corpus; no se alteraron datos de prueba (restricción 3). |
 
 ### FIND-051
@@ -1117,8 +1117,8 @@ Taxonomía: `[VERIFICADO-CÓDIGO]`, `[VERIFICADO-PRUEBA]`, `[DOCUMENTADO-NO-VERI
 | **Impacto** | `HYP-07` (RSS/OOM de Extraction), `FIND-047` (OOM de API), `HYP-08` (healthcheck) y `FIND-035` (SPOF Traefik) no se pueden validar con lo que capturan los scripts actuales. |
 | **Descubrimiento** | Etapa 4, revisión de instrumentación. |
 | **Causa raíz** | — (limitación de diseño de la suite) |
-| **Acción** | Añadir al protocolo de ejecución (§6.6 de `audit-benchmark.md`) la captura paralela de `docker stats --no-stream` y `docker inspect` de estado, y adjuntarla al registro de la corrida. |
-| **Estado** | Abierto — `[RECOMENDACIÓN]` |
+| **Acción** | Añadir al protocolo de ejecución (§6.6 de `audit-benchmark.md`) la captura paralela de `docker stats --no-stream` y `docker inspect` de estado, y adjuntarla al registro de la corrida. **Hecho:** el runbook §8 del mismo documento incluye los comandos exactos de monitoreo y volcado. |
+| **Estado** | `[LISTO PARA MEDIR EN BENCHMARK]` (2026-10-22): los comandos de instrumentación están fijados en `audit-benchmark.md` §8; se ejecutan junto con las corridas reales. |
 | **Restricciones** | No se ejecutaron cargas (restricción 6). |
 
 ### FIND-053

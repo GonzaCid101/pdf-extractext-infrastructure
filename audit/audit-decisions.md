@@ -11,20 +11,20 @@ Mapeo 1:1 con el ADR de Infrastructure. Estado = lo que la auditoría pudo confi
 
 | ID | ADR origen | Decisión | Verificación Etapa 1 | Estado |
 |---|---|---|---|---|
-| `DEC-01` | D1 | Traefik v3 con TLS local (mkcert), entrypoints :80→:443 | `traefik/traefik.yml` y compose (`traefik:v3`, puertos 80/443) consistentes con la decisión | `[VERIFICADO-CÓDIGO]` parcial (runtime pendiente Etapa 3) |
+| `DEC-01` | D1 | Traefik v3 con TLS local (mkcert), entrypoints :80→:443 | `traefik/traefik.yml` y compose (`traefik:v3`, puertos 80/443) consistentes con la decisión | `[VERIFICADO-CÓDIGO]` + runtime verificado E2E (smoke 15/15, `FIND-045` resuelto) |
 | `DEC-02` | D2 | Dominio local `pdf-extractext.localhost`; certs no versionados | `.gitignore:13` ignora `traefik/certs/`; carpeta `traefik/certs/` presente y vacía en disco | `[VERIFICADO-CÓDIGO]` |
-| `DEC-03` | D3 | Routing interno API→Extraction vía Traefik entrypoint `internal` :8090 no publicado | Compose: extraction con label `entrypoints=internal`, :8090 sin `ports:`; API con `EXTRACTION_URL=http://traefik:8090` | `[VERIFICADO-CÓDIGO]` — **nota 2026-10-19:** en el runtime actual el Traefik del proyecto está fuera de la red `services`, por lo que el camino declarado no es alcanzable hasta restaurar (`FIND-045`). |
+| `DEC-03` | D3 | Routing interno API→Extraction vía Traefik entrypoint `internal` :8090 no publicado | Compose: extraction con label `entrypoints=internal`, :8090 sin `ports:`; API con `EXTRACTION_URL=http://traefik:8090`. **2026-10-22:** el Traefik del proyecto está en la red `services` con el stack restaurado y verificado E2E (`FIND-045` resuelto). | `[VERIFICADO-CÓDIGO]` |
 | `DEC-04` | D4 | Aislamiento por redes `services` / `data`; solo Persistence en `data` | `docker-compose.yml:152-154` + pertenencia de servicios; grep confirma que Extraction no referencia Mongo/Persistence | `[VERIFICADO-CÓDIGO]` |
 | `DEC-05` | D5 | Tags de imagen parametrizables (`*_TAG`, default `dev`) | `.env.example`, compose (`image: …:${API_TAG:-dev}`, etc.) | `[VERIFICADO-CÓDIGO]` |
 | `DEC-06` | D6 | Build desde repos hermanos (`*_CONTEXT`) | `.env.example:9-25`, `Makefile:check` valida existencia de contextos y Dockerfiles | `[VERIFICADO-CÓDIGO]` |
 | `DEC-07` | D7 | MongoDB `mongo:8` definitivo; coordinar Persistence (tests en `mongo:7.0`) | **RESUELTO (2026-10-17):** el código de tests ya usaba `mongo:8` (`mongoImage()`); se alineó el README de Persistence a `mongo:8` y D7 en el ADR (`FIND-006`). Compilación verificada con `go vet -tags=integration` | **`[RESUELTO - IMPLEMENTADO]`** |
 | `DEC-08` | D8 | Healthchecks in-container + `depends_on: service_healthy` | **RESUELTO (2026-10-17):** D8 reescrito documentando el mecanismo real (`/healthprobe` en api/persistence, `python3 -c urllib … /readyz` en extraction, `mongosh ping` en Mongo), orden de arranque y justificación de no usar `curl` en distroless (`FIND-006`) | **`[RESUELTO - IMPLEMENTADO]`** |
 | `DEC-09` | D9 | Límites CPU/mem por instancia; réplicas Extraction 1–5 | Compose: límites en los 5 servicios; `Makefile:22-25` valida rango 1–5. **ADR D9 corregido el 2026-10-18** (antes decía "resto sin límites", contradiciendo al compose) → `FIND-009`. **2026-10-19 (Etapa 3C):** límites **efectivos** confirmados en los 5 contenedores con `docker inspect` (cpu/mem exactos, `no-new-privileges`). | `[VERIFICADO-PRUEBA]` |
-| `DEC-10` | D10 | Saturación = 503 + `Retry-After` implementado por Extraction | `admission.py` + `errors.py` en extractor; middleware de admisión presente | `[VERIFICADO-CÓDIGO]` (comportamiento bajo carga: pendiente Etapa 3/4) |
-| `DEC-11` | D11 | Herramientas de carga: k6 (spike 100 VUs, abierto ≥25 req/s) + Vegeta (50 req/s × 30s, timeout 30s) | Perfil de duración/timeout de Vegeta coincide (`DURATION=30s`, `TIMEOUT=30s`, `-insecure`), **pero el rate está en 1/s, no 50/s** → `FIND-007`; **k6 cableado a 1 VU** → `FIND-003` | `[VERIFICADO-CÓDIGO]` con gaps en ambas herramientas |
+| `DEC-10` | D10 | Saturación = 503 + `Retry-After` implementado por Extraction | `admission.py` + `errors.py` en extractor; middleware de admisión presente; propagación al cliente verificada en runtime (12 `curl` paralelos) | `[VERIFICADO-CÓDIGO]` + `[VERIFICADO-PRUEBA]` (comportamiento bajo carga real: pendiente §8 benchmark) |
+| `DEC-11` | D11 | Herramientas de carga: k6 (spike 100 VUs, abierto ≥25 req/s) + Vegeta (50 req/s × 30s, timeout 30s) | Perfil de duración/timeout de Vegeta coincide (`DURATION=30s`, `TIMEOUT=30s`, `-insecure`); **corregido 2026-10-21**: `RATE=50/s` (antes 1/s) y k6 con stages `10s→100, 20s→100, 10s→0` (antes 1 VU). Ambos validados contra el mock del repo; corridas reales pendientes. | `[VERIFICADO-CÓDIGO]` |
 | `DEC-12` | D12 | Sin CI por ahora; smoke local | Existe `.github/workflows/ci.yml` solo en `pdf-extractext-api` (repo propio); Infrastructure sin CI, `make smoke` local. **2026-10-19:** `golangci-lint` no está en el host; las 4 suites se ejecutaron manualmente (Etapa 3C) y ninguna corrió en CI. | `[VERIFICADO-CÓDIGO]` |
 | `DEC-13` | D13 | Stack fijo: Compose v2, Traefik v3, Mongo oficial, Make, Bash, curl; sin herramientas extra | Consistente con compose/Makefile/README | `[VERIFICADO-CÓDIGO]` |
-| `DEC-14` | D14 | Contrato Extraction: solo `multipart/form-data` (campo `file`) → `{content, page_count}` | API y extractor implementan multipart campo `file`; API responde exactamente `{content, page_count}`. Pregunta abierta del ADR sobre quién calcula el SHA-256 sigue sin resolverse en el código de orquestación (`upload_pdf.go` usa checksum del extractor); además el extractor transporta el Markdown dos veces (`FIND-020`) | `[VERIFICADO-CÓDIGO]` parcial / `[DECISIÓN-PENDIENTE]` (checksum, `FIND-020`) |
+| `DEC-14` | D14 | Contrato Extraction: solo `multipart/form-data` (campo `file`) → `{content, page_count}` | API y extractor implementan multipart campo `file`; API responde exactamente `{content, page_count}`. **Checksum (resuelto, D14):** lo calcula Extraction y la API lo reenvía a Persistence (`checksum_1`). El extractor transporta el Markdown en `extracted_text` y `content` (`FIND-020`): **aceptado por diseño** (2026-10-22), se conserva el contrato; no afecta a `/extract`, que solo publica `content`. | `[VERIFICADO-CÓDIGO]` |
 | `DEC-15` | D15 | API declarada en el compose (✅ resuelta) | Compose define servicio `api` con build `${API_CONTEXT}`, red `services`, env `EXTRACTION_URL`/`PERSISTENCE_URL`/`MAX_FILE_SIZE_MB=50`, router público TLS | `[VERIFICADO-CÓDIGO]` |
 
 Nota: el README de API (`README.md:26-27`) aún afirma que "esta API todavía no está declarada en ese compose" — contradicción con D15 y con el compose real → `CON-006`.
@@ -41,12 +41,12 @@ Nota: el README de API (`README.md:26-27`) aún afirma que "esta API todavía no
 | `CON-004` | README de Extraction: "solo recepción", respuesta `{filename, size}` | `README.md` (previo) | `extraction.py` + `domain/extractor.py` (extracción real con PyMuPDF a Markdown) | `FIND-004` | **Resuelta** (2026-10-18: README actualizado) |
 | `CON-005` | README de Persistence: "CRUD en etapas posteriores" | `README.md` (previo) | `internal/api/router.go:26-37` (CRUD + probes completos) | `FIND-004` | **Resuelta** (2026-10-18: README actualizado) |
 | `CON-006` | README de API: "Esta API todavía no está declarada en ese compose" | `README.md` (previo) | Infrastructure `docker-compose.yml` define el servicio `api` (D15 resuelta) | `FIND-004` | **Resuelta** (2026-10-18: README actualizado) |
-| `CON-007` | README de Infrastructure documenta `make load-k6` como spike a 100 VUs; el script ejecutado usa 1 VU | `README.md:75, 81-83` | `run_k6.sh:21` → `spike_tests.js:9-11` (`target: 1`) | `FIND-003` | Abierta |
-| `CON-008` | Enunciado de la cátedra: `tests/stress/pdfs`; repos: `tests/load/pdfs` (ahora con los 4 PDFs versionados) | Enunciado TP | Filesystem de los 4 repos | `FIND-001` | Abierta (`ASK-002`) |
+| `CON-007` | README de Infrastructure documenta `make load-k6` como spike a 100 VUs; el script ejecutado usa 1 VU | `README.md:75, 81-83` | `run_k6.sh:21` → `spike_tests.js:9-11` (`target: 1`) | `FIND-003` | **Resuelta** (2026-10-21): `spike_tests.js` usa stages `10s→100` (`TARGET_VUS`), README corregido |
+| `CON-008` | Enunciado de la cátedra: `tests/stress/pdfs`; repos: `tests/load/pdfs` (ahora con los 4 PDFs versionados) | Enunciado TP | Filesystem de los 4 repos | `FIND-001` | Abierta (`ASK-002`): desviación de ruta, sin impacto funcional (mismo corpus de 4 PDFs) |
 | `CON-009` | ADR D8 describe healthchecks con `curl` + CMD-SHELL; implementación real usa binario `/healthprobe` y `python3 -c urllib` | `architecture-decisions.md:55` | `docker-compose.yml:45-48, 93-98, 121-126` | `FIND-006` | **Resuelta** (D8 reescrito) |
 | `CON-010` | Enunciado pide `content` convertido a Markdown; el código extrae texto plano y ningún repo contiene código Markdown | Enunciado TP | `domain/extractor.py:35`; grep `markdown` = 0 resultados | `FIND-005` | **Resuelta** (`ASK-005`; Markdown implementado) |
-| `CON-011` | `run_vegeta.sh`, README y ADR D11 documentan "50 req/s × 30s"; el script está hardcoded a `RATE="1/s"` (~30 reqs en 30s, no 1.500) | `run_vegeta.sh:2,21`, `README.md:76`, `architecture-decisions.md:71` | `run_vegeta.sh:21,71` (`RATE="1/s"`, `-rate="$RATE"`) | `FIND-007` | Abierta (`ASK-008`) |
-| `CON-012` | El informe técnico presentaba métricas de scaling como reales citando archivos "simulado" inexistentes | `informe_tecnico.md:47-84` (versión previa) | `docs/test-runs/` no contiene `20261007T100000Z-k6-1-replica.md` ni `...-5-replicas.md` | `FIND-008` | **Resuelta** (2026-10-18: sección neutralizada) |
+| `CON-011` | `run_vegeta.sh`, README y ADR D11 documentan "50 req/s × 30s"; el script estaba hardcoded a `RATE="1/s"` (~30 reqs en 30s, no 1.500) | `run_vegeta.sh:2,21`, `README.md:76`, `architecture-decisions.md:71` | `run_vegeta.sh` (`RATE="${RATE:-50/s}"`) | `FIND-007` | **Resuelta** (2026-10-21): rate por defecto 50/s; targets en `-format=json` (`FIND-048`) |
+| `CON-012` | El informe técnico presentaba métricas de scaling como reales citando archivos "simulado" inexistentes | `informe_tecnico.md` (versión previa) | `docs/test-runs/` no contiene `20261007T100000Z-k6-1-replica.md` ni `...-5-replicas.md` | `FIND-008` | **Resuelta** (2026-10-18: sección neutralizada; 2026-10-22: informe redactado completo con tablas vacías por diseño) |
 | `CON-013` | ADR D9 decía "resto de servicios: sin límites en desarrollo local"; el compose fija límites en los 5 servicios | `architecture-decisions.md` D9 (previo) | `docker-compose.yml` (5 × `deploy.resources.limits`) | `FIND-009` | **Resuelta** (2026-10-18: D9 corregido) |
 | `CON-014` | `.env.example` citaba `docs/pending-decisions.md`, archivo eliminado y reemplazado por `docs/architecture-decisions.md` | `.env.example:3` (previo) | `docs/architecture-decisions.md` existe; `docs/pending-decisions.md` no | `FIND-009` | **Resuelta** (2026-10-18) |
 | `CON-015` | README de Infrastructure decía que `make smoke` verifica "14 checks"; el script implementa 15 | `README.md:42` (previo) | `scripts/smoke.sh` (checks 1–15) | `FIND-010` | **Resuelta** (2026-10-18: README corregido) |
@@ -62,7 +62,7 @@ Nota: el README de API (`README.md:26-27`) aún afirma que "esta API todavía no
 | ID | Pregunta | Contexto | Bloquea | Prioridad |
 |---|---|---|---|---|
 | `ASK-001` | ~~¿Pueden copiar los 4 PDFs oficiales (`2020-Scrum-Guide-Spanish-Latin-South-American.pdf`, `Essential-Kanban-Condensed-Spanish.pdf`, `Filosofia Lean.pdf`, `scrum_manager_historias_usuario.pdf`) a `tests/load/pdfs/` del repo Infrastructure?~~ | **`[RESUELTO]` (2026-10-18).** Los 4 PDFs están presentes y ahora **se versionan** en `tests/load/pdfs/` (se eliminó la exclusión de `.gitignore`). Ver `FIND-001`; queda abierto el dato duplicado (`FIND-011`). | Benchmarks reales (Etapa 3/4) | — |
-| `ASK-002` | ¿La ruta del enunciado `tests/stress/pdfs` designa el mismo conjunto que `tests/load/pdfs` del repo, o existe otro repositorio/carpetas no clonados en este workspace? | Ningún repo contiene `tests/stress/`; el workspace solo tiene los 4 repos clonados. | Clarar alcance del conjunto oficial | **Alta** |
+| `ASK-002` | ¿La ruta del enunciado `tests/stress/pdfs` designa el mismo conjunto que `tests/load/pdfs` del repo, o existe otro repositorio/carpetas no clonados en este workspace? | Ningún repo contiene `tests/stress/`; el workspace solo tiene los 4 repos clonados. **2026-10-22:** única `ASK` abierta; el corpus efectivo (4 PDFs, hashes únicos) vive en `tests/load/pdfs/` y coincide con el del enunciado; la desviación de ruta es documental (`CON-008`) y no afecta la ejecución. | Clarar alcance del conjunto oficial (sin impacto funcional) | Media |
 | `ASK-003` | ~~¿Cuál es el script k6 canónico del TP: `k6-spike.js` (100 VUs, usa fixtures generados `fixture-*.pdf`) o `spike_tests.js` (1 VU, usa los 4 PDFs oficiales)? `make load-k6` hoy ejecuta el segundo.~~ | **`[RESUELTO]` (2026-10-18).** Canónico = `spike_tests.js`; `k6-spike.js` y `generate_fixtures.sh` fueron eliminados. El salto a 100 VUs queda pendiente hasta la etapa final de benchmarks (`FIND-003`). | Comparabilidad de resultados k6 con la referencia | — |
 | `ASK-004` | ¿Dónde están registradas las corridas que produjeron las cifras de referencia (1.037 reqs / 25,35 req/s k6; 998 exitosas / 501 timeouts Vegeta)? | **Parcialmente respondida (2026-10-18):** existen 5 corridas locales en `docs/test-runs/` (3 k6 + 2 Vegeta, del 2026-10-16), pero están **gitignoreadas** (no versionadas) y usan los perfiles aún no corregidos (`FIND-003`/`FIND-007`), por lo que no son comparables con la referencia del TP. | Contraste de benchmarks | Media |
 | `ASK-005` | ~~¿"content convertido a Markdown cuando corresponda" exige transformación real o acepta texto plano?~~ | **`[RESUELTO E IMPLEMENTADO]` (2026-10-17).** El equipo decidió implementar conversión real a Markdown nativo en el extractor. Ver "Registro de Resoluciones" abajo. | — | — |
@@ -164,3 +164,28 @@ Nota: el README de API (`README.md:26-27`) aún afirma que "esta API todavía no
   - Tests: fixture `encrypted_pdf` en `tests/conftest.py`; `TestEncryptedPdf`, `TestImageBlocksAreSkipped`, `tests/api/test_extract.py::test_encrypted_pdf_maps_to_422`, `tests/api/test_concurrency.py` (2 tests de regresión); docstrings compactados (Clean Code).
 - **Verificación `[VERIFICADO-PRUEBA]`:** `make test` → **76 passed, 1 xfailed**; los 2 tests de concurrencia fallan si se revierte el `threadpool`.
 - **Detalle:** `audit-master.md` §8 (C-27…C-30); `audit-findings.md` (`FIND-016`…`FIND-022`).
+
+---
+
+## Registro de Resoluciones — Etapa 5 (cierre), 2026-10-22
+
+> Sesión de consolidación global. No se modificó código de aplicación en `api`,
+> `extractor` ni `persistence`; en `infrastructure` solo `audit/` y
+> `docs/informe_tecnico.md`. **No se ejecutaron pruebas de carga.**
+
+### R-08 — Cierre de decisiones y contradicciones residuales
+
+- **Decisiones actualizadas al estado real:** `DEC-01`/`DEC-03`/`DEC-10` (runtime
+  restaurado y verificado E2E), `DEC-11` (perfiles k6/Vegeta corregidos),
+  `DEC-14` (checksum resuelto; `FIND-020` aceptado por diseño).
+- **Contradicciones resueltas:** `CON-007`, `CON-011` (scripts alineados a
+  k6 100 VUs / Vegeta 50 req/s), `CON-012` (informe redactado completo con
+  tablas vacías por diseño).
+- **Contradicciones abiertas por diseño:** `CON-008` (ruta `tests/stress`
+  del enunciado vs `tests/load` del repo; `ASK-002`, sin impacto funcional).
+- **Preguntas cerradas:** `ASK-002` queda como única `ASK` abierta (dato de
+  ruta del equipo); el resto están resueltas/implementadas.
+- **Pregunta cerrada sin cambio de contrato:** `FIND-020` → `[ACEPTADO POR
+  DISEÑO]`; no se reabre `D14`.
+- **Detalle:** `audit-master.md` §8 (C-66…C-69) y §9 (Matriz de Cumplimiento
+  contra `consigna.md`); `audit-benchmark.md` §8 (runbook de benchmarks).

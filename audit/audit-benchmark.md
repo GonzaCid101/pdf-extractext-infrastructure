@@ -142,7 +142,7 @@ Análisis estático; **sin ejecutar cargas** (restricción 6). Puntos a contrast
 - **`/extract` (stateless):** no consulta Persistence. El mismo PDF siempre dispara `Extraction` de nuevo y responde 200. Con los 4 PDFs rotados por k6/Vegeta, el costo CPU se paga completo en cada request.
 - **`/upload-pdf` (orquestado):** **no hay caché/consulta previa por checksum**. Flujo real: `Extraction` (siempre) → `Persistence.Create` → `InsertOne` a ciegas → el índice único `checksum_1` dispara `IsDuplicateKeyError` → recupera el existente → 409 con el documento. Es decir, el caso (a) "efecto caché" **no existe**; aplica (b): siempre se extrae y luego 409. Bajo carga repetida el trabajo de extracción se duplica y solo se evita la segunda escritura.
 - **Idempotencia / concurrencia:** el `Save` es `insert` (no `upsert`). No hay `race` que duplique documentos (el índice `unique` lo impide y el perdedor cae en 409), pero sí hay *retrabajo*: N clientes simultáneos con el mismo PDF ejecutan N extracciones y N-1 inserts fallidos.
-- **Implicación para el benchmark:** los PDFs rotados son 4 contenidos (uno de ellos `FIND-011` es duplicado de `heavy.292.pdf`), así que dentro de una corrida de Vegeta de 1.500 reqs el mismo checksum aparece muchas veces → se esperan muchos **409**, no 201. Los percentiles de `/upload-pdf` medirán extracción + escritura fallida, no caché.
+- **Implicación para el benchmark:** los PDFs rotados son 4 contenidos distintos (corpus con 4 hashes únicos, `FIND-011` resuelto), así que dentro de una corrida de Vegeta de 1.500 reqs el mismo checksum aparece muchas veces → se esperan muchos **409**, no 201. Los percentiles de `/upload-pdf` medirán extracción + escritura fallida, no caché.
 
 ### 5.2 Cliente HTTP y concurrencia de la API
 
@@ -191,7 +191,7 @@ Inspección de **solo lectura** de los scripts y del corpus (restricciones 6 y 8
 | Aspecto | Consigna | Implementación actual | Veredicto |
 |---|---|---|---|
 | Ruta | `tests/stress/pdfs/` | `tests/load/pdfs/` (versionados) | **Desviación** (`FIND-001`, ya registrada). Repos: existen `tests/load/pdfs` (Infrastructure) y `tests/data/heavy.292.pdf` (Extractor); **`tests/stress/pdfs` no existe** en ningún repo. |
-| Nº de PDFs | 4 | 4 archivos / **3 hashes únicos** | **Parcial**: `Essential-Kanban…` ≡ `heavy.292.pdf` (`FIND-011`). |
+| Nº de PDFs | 4 | 4 archivos / **4 hashes únicos** | **OK** (post-2026-10-21): el duplicado estaba en el Extractor (`heavy.292.pdf`), ya eliminado; `FIND-011` resuelto. |
 | Disparidad de coste | — | 319 KB→8,9 MB; 16→90 páginas; 0→91 imágenes | **Sesgo de corpus**: la rotación cubre documentos ~28× más caros que otros. |
 | Tipo | (no se exige) | Todos texto nativo, ninguno cifrado | OK para `/extract`; no cubre escaneados. |
 
@@ -235,7 +235,7 @@ Cómo cargan los scripts: k6 abre los 4 PDFs en `init` y rota **al azar** (`spik
 | B2 | **k6 no exporta resumen** | `FIND-049`: `--summary-export` retirado en v2.x | p50/p90/p95/throughput/success = 0 aunque el ataque ocurra. Solo quedan los checks en consola. |
 | B3 | **Perfil k6 ≠ consigna** | `spike_tests.js:9` `target: 1` vs 100 VUs | Throughput/latencias no son las del spike del TP. |
 | B4 | **Perfil Vegeta ≠ consigna** | `run_vegeta.sh:15` `RATE="1/s"` vs 50/s | No reproduce 1.500 reqs ni el 16,65 req/s de referencia. |
-| B5 | **Corpus con hash duplicado + disparidad** | `FIND-011`; §6.1 | El coste por request varía ×28; los percentiles mezclan barato/caro y el "4 PDFs" es en realidad 3. |
+| B5 | **Corpus: disparidad de coste (ya sin hash duplicado)** | `FIND-011` resuelto (4 hashes únicos); `FIND-050` (disparidad ×28) | El coste por request varía ×28; los percentiles mezclan barato/caro. Documentar el corpus efectivo en cada corrida. |
 | B6 | **Sin caché/dedupe/rate-limit en `/extract`** | `extract.go:22-56` (stateless, sin caché); `INT-01`. Los 409/`ErrConflict` pertenecen a `/upload-pdf`→Slices, **que las suites de carga no atacan** | **No** aparecen 409/400/422 espurios en estas corridas: cada request extrae de verdad. **El sesgo 409 es teórico aquí** (solo aplicaría si se atacara `/upload-pdf`). |
 | B7 | **Estado residual en Mongo** | Mongo solo lo toca Persistence; las suites usan `/extract` (stateless). Las corridas de k6/Vegeta **no escriben** documentos | La reproducibilidad de *estas* corridas no depende de Mongo. Si se hiciera una variante contra `/upload-pdf`, sí habría estado acumulado (`INT-03`, índice `checksum_1`). |
 | B8 | **Sin instrumentación de infraestructura** | Los scripts solo guardan la salida del cliente (k6/Vegeta). No hay `docker stats`, métricas por contenedor, reinicios/OOMKilled ni distribución entre réplicas | Imposible atribuir latencias a CPU/memoria/replicación ni validar `HYP-07`/`FIND-047`/`FIND-035` con lo que hoy capturan los scripts. |
@@ -271,7 +271,7 @@ docker inspect -f '{{.State.Health.Status}} {{.State.OOMKilled}} {{.RestartCount
 2. `FIND-049`: `spike_tests.js` con `handleSummary()`; `run_k6.sh` parsea el formato v2.x. ✔
 3. `FIND-003`: `spike_tests.js` con stages `10s→100, 20s→100, 10s→0` (parametrizable `TARGET_VUS`). ✔
 4. `FIND-007`: `RATE="${RATE:-50/s}"` (1.500 reqs). ✔
-5. `FIND-011`: el `Essential-Kanban…` duplicado **sigue** (pendiente de decisión; documentar corpus de 3 hashes).
+5. `FIND-011`: el duplicado `heavy.292.pdf` del Extractor **fue eliminado** (2026-10-21); el corpus de Infrastructure tiene **4 hashes únicos**. ✔
 
 **Fase 2 — Estado limpio (requiere autorización):**
 ```bash
@@ -298,7 +298,7 @@ KEEP_RESULTS=1 RECORD=1 bash tests/load/vegeta/run_vegeta.sh 2>&1 | tee /tmp/veg
 ```
 
 **Fase 5 — Cierre y registro:**
-- Anotar en `docs/test-runs/<fecha>-<tool>.md`: réplicas, límites, versión de k6/Vegeta, el corpus efectivo (3 hashes), y las tasas reales.
+- Anotar en `docs/test-runs/<fecha>-<tool>.md`: réplicas, límites, versión de k6/Vegeta, el corpus efectivo (4 hashes) y las tasas reales.
 - Adjuntar el `docker stats` e `inspect` de Fase 3 como evidencia de `HYP-07`/`FIND-047`.
 - Comparar la **distribución de status** (200 vs 503 vs 502/timeout) para separar backpressure real (`HYP-04`/`HYP-09`) de timeouts de cliente.
 
@@ -330,3 +330,98 @@ Correcciones aplicadas a los 3 scripts de carga de Infrastructure (autorizadas p
 - §5.5 (Etapa 3C) cruza compose/configs con las suites ejecutadas; la RSS/estabilidad real queda pendiente de Etapa 4 (`FIND-045`, `FIND-047`).
 - §6 (Etapa 4, 2026-10-20): solo lectura sobre scripts/corpus. **No se ejecutó** el spike de 100 VUs ni el ataque de 50 req/s (restricción 6). Validaciones acotadas: `k6 inspect` (sin VUs ni red) y reproducción de targets de Vegeta contra un **stub local de un solo uso en `/tmp/opencode/`** (detenido; ningún contenedor del proyecto tocado). `vegeta` se instaló en `~/go/bin` solo para validar sintaxis; no se modificó ningún archivo del proyecto (los 4 repos quedan con `git status` limpio salvo `audit/`).
 - §6.7 (Etapa 4, 2026-10-21): correcciones de scripts **validadas** contra el mock oficial `tests/load/mock_api.py` y un stub local, ambos detenidos. **No** se levantó el stack ni se lanzó carga contra servicios del proyecto. No se modificó `MONGO_IMAGE`, compose, límites ni perfiles; los cambios se limitan a `tests/load/` (scripts + mock) y `README.md`/`audit/`/`docs/`.
+
+---
+
+## 8. Runbook Exacto de Ejecución Post-Auditoría (para el equipo)
+
+Procedimiento manual, paso a paso, para obtener las cifras que faltan y volcarlas en `docs/informe_tecnico.md` §6. **La auditoría no ejecutó nada de esto** (restricción: no correr cargas): los números siguen pendientes. Todo lo que modifica el entorno (recrear el stack, lanzar ataques, escalar réplicas) lo decide y ejecuta el equipo.
+
+**Requisitos previos en el host:** `docker` + `docker compose` v2, `mkcert`, `k6`, `vegeta`, `jq`, y `pdf-extractext.localhost` resolviendo a `127.0.0.1`.
+
+### Paso 0 — Preparar y verificar el stack base
+
+```bash
+cd pdf-extractext-infrastructure
+command -v docker k6 vegeta jq mkcert         # todas deben existir
+make check && make certs && make up            # build + TLS + arranque
+make smoke                                      # esperado: SMOKE OK (15/15)
+```
+
+Dejar todos los contenedores en `healthy` antes de medir:
+
+```bash
+docker inspect -f '{{.Name}} {{.State.Health.Status}}' $(docker compose ps -q)
+```
+
+### Paso 1 — Corrida con **1 réplica** de Extraction
+
+En una terminal, lanzar el monitoreo continuo (CPU/mem por contenedor):
+
+```bash
+while :; do docker stats --no-stream --format \
+  '{{.Name}} {{.CPUPerc}} {{.MemUsage}} {{.MemPerc}}'; sleep 1; done \
+  | tee /tmp/stats-1rep-$(date -u +%s).log
+```
+
+En la terminal de trabajo, fixear la topología y correr ambos ataques:
+
+```bash
+EXTRACTION_REPLICAS=1 make up
+# (esperar healthchecks 'healthy')
+
+# k6 — spike 100 VUs (modelo cerrado, 40 s)
+TARGET_VUS=100 RECORD=1 bash tests/load/run_k6.sh 2>&1 | tee /tmp/k6-1rep.log
+
+# Vegeta — 50 req/s × 30 s (modelo abierto), timeout cliente 30 s
+KEEP_RESULTS=1 RECORD=1 RATE=50/s DURATION=30s bash tests/load/vegeta/run_vegeta.sh 2>&1 | tee /tmp/vegeta-1rep.log
+```
+
+Al terminar, capturar el estado final de los contenedores (OOM/reinicios/health):
+
+```bash
+docker inspect -f '{{.Name}} oom={{.State.OOMKilled}} restarts={{.RestartCount}} health={{if .State.Health}}{{.State.Health.Status}}{{end}}' \
+  $(docker compose ps -q) | tee /tmp/inspect-1rep.log
+```
+
+### Paso 2 — Corrida con **5 réplicas** de Extraction (escenario optimizado)
+
+Repetir el Paso 1 cambiando únicamente la topología:
+
+```bash
+EXTRACTION_REPLICAS=5 make up          # validado 1..5 por make check
+docker compose ps                       # deben verse 5 contenedores extraction-*
+# repetir k6 + Vegeta + monitoreo + inspect como en el Paso 1
+```
+
+### Paso 3 — Guardar las evidencias
+
+Los runners con `RECORD=1` escriben un registro en `docs/test-runs/` (`record-run.sh`), que hoy es **local/gitignoreado**. Adjuntar a ese registro:
+
+- La salida de `k6` (resumen p50/p90/p95/p99, throughput, %éxito).
+- El `report` de Vegeta (`vegeta report -type=json results.bin` o `-type=text`): throughput efectivo, éxitos, códigos, latencias.
+- El `docker stats` (Paso 1) e `docker inspect` final (OOM/restarts/health) como evidencia de `HYP-07`, `HYP-08`, `FIND-047` y `FIND-051`.
+- La topología medida (`EXTRACTION_REPLICAS`), la versión de k6/Vegeta y el corpus efectivo (los 4 PDFs, hashes en §1.2).
+
+### Paso 4 — Volcar los números en el informe
+
+Completar en `docs/informe_tecnico.md` §6 las tablas (hoy vacías por diseño):
+
+| Tabla del informe | De qué corrida se llena |
+|---|---|
+| **1 réplica — k6 (spike 100 VUs)** | Paso 1, k6 |
+| **1 réplica — Vegeta (50 req/s × 30 s)** | Paso 1, Vegeta |
+| **5 réplicas — k6 (spike 100 VUs)** | Paso 2, k6 |
+| **5 réplicas — Vegeta (50 req/s × 30 s)** | Paso 2, Vegeta |
+| **Comparativa vs referencia del profesor** | `audit-benchmark.md` §3 (referencia) vs las 4 filas anteriores |
+
+### Paso 5 — Interpretar (criterio de análisis)
+
+Al comparar contra la referencia del profesor (`audit-benchmark.md` §3):
+
+- **k6 (spike):** buscar throughput ≥ 25,35 req/s con error ≈ 0 % y percentiles ≤ p50 1,88 s / p95 8,80 s.
+- **Vegeta (carga abierta):** buscar tasa de éxito ≥ 66,53 % y P50 ≤ 14,89 s; distinguir **503 de backpressure** (esperado, controlado) de **timeouts de cliente 30 s** (indeseado, rompe el contrato útil).
+- **1 vs 5 réplicas:** la hipótesis a confirmar es menor latencia y menos 503 con 5 réplicas, con throughput mayor (paralelización horizontal), sin superar los límites de 1 CPU / 1 GiB por réplica.
+
+> **Reproducibilidad:** los cuatro ataques deben correrse con el mismo host, los mismos límites de contenedor y el mismo corpus; cualquier corrida previa con perfiles antiguos (1 VU / 1 req/s) **no** es comparable y no debe usarse en el informe.
+
