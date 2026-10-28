@@ -60,6 +60,11 @@ test:
 		$(COMPOSE) --env-file .env.example config -q || exit 1; \
 	fi
 	@echo "OK"
+	@echo "== test: unitarios infra =="
+	@if [ -f tests/load/test_mock_api.py ]; then \
+		python3 -m unittest tests.load.test_mock_api 2>&1 | tail -5 || exit 1; \
+	fi
+	@echo "OK"
 
 up: check
 	$(COMPOSE) up -d --build

@@ -1,6 +1,6 @@
-"""Mock del API para ensayar k6/Vegeta sin stack (RECORD=0).
+"""Mock del API para ensayar k6/Vegeta sin stack.
 
-Valida multipart y sha256 de los 4 PDFs oficiales; responde 200 {content, page_count} o 400.
+Valida multipart y sha256 de los 4 PDFs oficiales; responde 200 {content, page_count} o 400 con problem+json.
 GET / responde 200 (readiness).
 """
 import hashlib
@@ -44,15 +44,30 @@ def hit(kind, name=None):
     dump()
 
 
+def _problem(status, code, title, detail):
+    payload = {
+        "type": f"urn:pdf-extractext:{code.lower()}",
+        "title": title,
+        "status": status,
+        "detail": detail,
+        "code": code,
+    }
+    return json.dumps(payload).encode("utf-8")
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
-    def _send(self, code, payload):
+    def _send(self, code, payload, content_type="application/json"):
         self.send_response(code)
-        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
         self.wfile.write(payload)
+
+    def _send_problem(self, status, code, title, detail):
+        payload = _problem(status, code, title, detail)
+        self._send(status, payload, content_type="application/problem+json")
 
     def do_GET(self):
         self._send(200, b'{"service":"mock","status":"ok"}')
@@ -63,19 +78,24 @@ class Handler(BaseHTTPRequestHandler):
         ct = self.headers.get("Content-Type", "")
         if "multipart/form-data" not in ct or b'name="file"' not in body:
             hit("no_file")
-            self._send(400, b'{"error":"se requiere el campo multipart \'file\'"}')
+            self._send_problem(400, "INVALID_REQUEST", "Solicitud inválida", "Se requiere el campo multipart 'file'.")
             return
         m = re.search(rb'filename="([^"]+)"', body)
         if not m or m.group(1).decode() not in FIXTURES:
             hit("bad")
-            self._send(400, b'{"error":"filename desconocido"}')
+            self._send_problem(400, "INVALID_REQUEST", "Solicitud inválida", "Filename desconocido.")
             return
         name = m.group(1).decode()
-        part = body.split(b"\r\n\r\n", 1)[1]
-        part = part[: part.rfind(b"\r\n--")]
+        try:
+            part = body.split(b"\r\n\r\n", 1)[1]
+            part = part[: part.rfind(b"\r\n--")]
+        except Exception:
+            hit("bad")
+            self._send_problem(400, "INVALID_REQUEST", "Solicitud inválida", "Payload multipart inválido.")
+            return
         if hashlib.sha256(part).hexdigest() != DIGESTS[name]:
             hit("bad")
-            self._send(400, b'{"error":"payload corrupto"}')
+            self._send_problem(400, "INVALID_REQUEST", "Solicitud inválida", "Payload corrupto.")
             return
         hit("hits", name)
         resp = json.dumps({"content": f"pdf-extractext mock {name}", "page_count": PAGES[name]}).encode()
@@ -85,4 +105,5 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
-ThreadingHTTPServer(("127.0.0.1", 8642), Handler).serve_forever()
+if __name__ == "__main__":
+    ThreadingHTTPServer(("127.0.0.1", 8642), Handler).serve_forever()
