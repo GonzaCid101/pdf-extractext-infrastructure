@@ -64,6 +64,9 @@ test:
 	@if [ -f tests/load/test_mock_api.py ]; then \
 		python3 -m unittest tests.load.test_mock_api 2>&1 | tail -5 || exit 1; \
 	fi
+	@if [ -f tests/load/test_metrics_parse.sh ]; then \
+		bash tests/load/test_metrics_parse.sh || exit 1; \
+	fi
 	@echo "OK"
 
 up: check

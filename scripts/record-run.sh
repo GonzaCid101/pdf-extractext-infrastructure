@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# record-run.sh — registra una corrida de carga (k6/Vegeta) con la config real del stack activo.
-# El entorno se extrae con docker compose ps / inspect; los resultados se pasan como flags CLI.
-# Uso: ver ./scripts/record-run.sh --help
-
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -10,24 +6,24 @@ TEMPLATE="docs/test-runs/TEMPLATE.md"
 OUT_DIR="docs/test-runs"
 
 usage() {
-	cat <<'EOF'
+	cat <<EOF
 Uso: record-run.sh --tool <k6|vegeta> --target <url> --load <desc>
-                   --throughput <req/s> --success <%> --p50 <ms> --p90 <ms> --p95 <ms>
+                    --throughput <req/s> --success <%> --p50 <ms> --p90 <ms> --p95 <ms>
                    [--desc <texto>] [--out-dir <dir>]
-
-Extrae del stack activo (docker compose ps / inspect) réplicas, tags de
-imagen, límites CPU/mem y versiones de Traefik/Mongo, y genera
-docs/test-runs/<fechaUTC>-<tool>.md a partir del TEMPLATE.md.
-
-  --tool        k6 o vegeta (requerido)
-  --target      endpoint atacado (requerido)
-  --load        patrón de carga, ej. "k6 abierto 25 req/s" (requerido)
-  --throughput  req/s resultantes (requerido)
-  --success     % éxito (requerido)
-  --p50/--p90/--p95  latencias en ms (requeridos)
-  --desc        descripción del escenario (opcional)
-  --out-dir     directorio de salida (default: docs/test-runs)
 EOF
+}
+
+render_template() {
+	local template_content="$1"
+	shift
+	local out="$template_content"
+	local pair key val
+	for pair in "$@"; do
+		key="${pair%%=*}"
+		val="${pair#*=}"
+		out="${out//\{\{$key\}\}/$val}"
+	done
+	printf '%s\n' "$out"
 }
 
 TOOL= TARGET= LOAD= THROUGHPUT= SUCCESS= P50= P90= P95= DESC= OUT_DIR="$OUT_DIR"
@@ -59,14 +55,8 @@ case "$TOOL" in k6|vegeta) ;; *) echo "ERROR: --tool debe ser k6 o vegeta" >&2; 
 
 COMPOSE="docker compose"
 
-# --- Extracción del entorno ---
-
-# ids de contenedores running de un servicio
 service_ids() { $COMPOSE ps -q --status running "$1" 2>/dev/null || true; }
-
-# primer id del servicio; vacío si el servicio no está levantado
 first_id() { service_ids "$1" | head -1; }
-
 replicas() { service_ids "$1" | grep -c . || true; }
 
 image_of() {
@@ -75,7 +65,6 @@ image_of() {
 	[[ -n "$id" ]] && docker inspect "$id" --format '{{.Config.Image}}' || echo "no running"
 }
 
-# límites vigentes: NanoCpus (0 = sin límite) y Memory bytes (0 = sin límite)
 cpu_limit() {
 	local id nano
 	id="$(first_id "$1")"
@@ -102,8 +91,7 @@ traefik_version() {
 	local id v
 	id="$(first_id traefik)"
 	[[ -n "$id" ]] || { echo "—"; return; }
-	v="$(docker exec "$id" traefik version 2>/dev/null | awk '/^Version/{print $2}')" \
-		|| true
+	v="$(docker exec "$id" traefik version 2>/dev/null | awk '/^Version/{print $2}')" || true
 	if [[ -z "$v" ]]; then
 		v="$(docker inspect "$(image_of traefik)" --format '{{index .Config.Labels "org.opencontainers.image.version"}}' 2>/dev/null || true)"
 	fi
@@ -118,8 +106,6 @@ mongo_version() {
 	echo "${v:-desconocida}"
 }
 
-# --- Validación de stack ---
-
 if [[ -z "$($COMPOSE ps -q 2>/dev/null)" ]]; then
 	echo "ERROR: el stack no está levantado (docker compose ps vacío)." >&2
 	echo "       Ejecutá 'make up' y corré la prueba de carga antes de registrarla." >&2
@@ -132,42 +118,45 @@ for svc in extraction persistence traefik mongodb; do
 	fi
 done
 
-# --- Render del registro ---
-
 FECHA="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-${TOOL}"
 OUT="$OUT_DIR/${RUN_ID}.md"
 
-out="$(cat "$TEMPLATE")"
-render() { # render KEY value
-	local key="$1" val="$2"
-	out="${out//\{\{$key\}\}/$val}"
-}
-
-render RUN_ID "$RUN_ID"
-render FECHA "$FECHA"
-render TOOL "$TOOL"
-render DESC "${DESC:-—}"
-render TARGET "$TARGET"
-render LOAD "$LOAD"
-
-for svc in EXT:extraction PER:persistence TRA:traefik MON:mongodb; do
-	key="${svc%%:*}"; name="${svc##*:}"
-	render "${key}_REPLICAS" "$(replicas "$name")"
-	render "${key}_IMAGE" "$(image_of "$name")"
-	render "${key}_CPU" "$(cpu_limit "$name")"
-	render "${key}_MEM" "$(mem_limit "$name")"
-done
-
-render TRA_VERSION "$(traefik_version)"
-render MON_VERSION "$(mongo_version)"
-
-render THROUGHPUT "$THROUGHPUT"
-render SUCCESS "$SUCCESS"
-render P50 "$P50"
-render P90 "$P90"
-render P95 "$P95"
+template_content="$(cat "$TEMPLATE")"
+out="$(render_template "$template_content" \
+	RUN_ID="$RUN_ID" \
+	FECHA="$FECHA" \
+	TOOL="$TOOL" \
+	DESC="${DESC:-—}" \
+	TARGET="$TARGET" \
+	LOAD="$LOAD" \
+	EXT_REPLICAS="$(replicas extraction)" \
+	EXT_IMAGE="$(image_of extraction)" \
+	EXT_CPU="$(cpu_limit extraction)" \
+	EXT_MEM="$(mem_limit extraction)" \
+	PER_REPLICAS="$(replicas persistence)" \
+	PER_IMAGE="$(image_of persistence)" \
+	PER_CPU="$(cpu_limit persistence)" \
+	PER_MEM="$(mem_limit persistence)" \
+	TRA_REPLICAS="$(replicas traefik)" \
+	TRA_IMAGE="$(image_of traefik)" \
+	TRA_CPU="$(cpu_limit traefik)" \
+	TRA_MEM="$(mem_limit traefik)" \
+	TRA_VERSION="$(traefik_version)" \
+	MON_REPLICAS="$(replicas mongodb)" \
+	MON_IMAGE="$(image_of mongodb)" \
+	MON_CPU="$(cpu_limit mongodb)" \
+	MON_MEM="$(mem_limit mongodb)" \
+	MON_VERSION="$(mongo_version)" \
+	THROUGHPUT="$THROUGHPUT" \
+	SUCCESS="$SUCCESS" \
+	P50="$P50" \
+	P90="$P90" \
+	P95="$P95")"
 
 mkdir -p "$OUT_DIR"
 printf '%s\n' "$out" > "$OUT"
 echo "Registro generado: $OUT"
+EOF
+chmod +x /home/gonzalo/facu/desarrollo-software/pdf-extractext-microservicios/pdf-extractext-infrastructure/scripts/record-run.sh
+bash -n /home/gonzalo/facu/desarrollo-software/pdf-extractext-microservicios/pdf-extractext-infrastructure/scripts/record-run.sh && echo "OK"

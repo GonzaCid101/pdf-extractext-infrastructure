@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# run_k6.sh — spike k6 contra POST /extract.
-# Perfil del TP: ramp 0→100 VUs (10s), 100 VUs (20s), →0 (10s). Parametrizable con TARGET_VUS.
+# spike k6 contra POST /extract
 
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+
+source "$(dirname "$0")/lib/metrics.sh"
 
 command -v k6 >/dev/null 2>&1 || { echo "ERROR: falta k6"; exit 1; }
 command -v jq >/dev/null 2>&1 || { echo "ERROR: falta jq"; exit 1; }
@@ -12,8 +13,6 @@ RECORD="${RECORD:-1}"
 TARGET_URL="${TARGET_URL:-https://pdf-extractext.localhost/extract}"
 TARGET_VUS="${TARGET_VUS:-100}"
 
-# spike_tests.js construye `${BASE_URL}/extract`; se deriva el origen de TARGET_URL
-# para que TARGET_URL sea la única perilla de destino (p. ej. un stub local).
 BASE_URL="${BASE_URL:-${TARGET_URL%/extract}}"
 
 if [ "$RECORD" = "1" ] && [ -z "$(docker compose ps -q 2>/dev/null)" ]; then
@@ -27,24 +26,13 @@ rm -f "$SUMMARY"
 TARGET_VUS="$TARGET_VUS" BASE_URL="$BASE_URL" K6_SUMMARY_PATH="$SUMMARY" \
   k6 run ${K6_ARGS:-} tests/load/spike_tests.js || k6_rc=$?
 
-# handleSummary escribe el JSON en formato de k6 v2.x (data.metrics.*.values.*).
-stat_ms() {
-  if [ -f "$SUMMARY" ]; then
-    jq -r --arg k "$1" '.metrics.http_req_duration.values[$k] // 0' "$SUMMARY" | awk '{printf "%.1f", $1}'
-  else
-    echo 0
-  fi
-}
-p50=$(stat_ms 'med')
-p90=$(stat_ms 'p(90)')
-p95=$(stat_ms 'p(95)')
+# Extrae métricas vía helper puro
+read -r throughput success p50 p90 p95 <<< "$(parse_k6_summary_json "$SUMMARY")"
 if [ -f "$SUMMARY" ]; then
-  throughput=$(jq -r '.metrics.http_reqs.values.rate // 0' "$SUMMARY" | awk '{printf "%.2f", $1}')
-  success=$(jq -r '.metrics.extract_ok.values.rate // 0' "$SUMMARY" | awk '{printf "%.1f", $1 * 100}')
   failed=$(jq -r '.metrics.http_req_failed.values.rate // 0' "$SUMMARY" | awk '{printf "%.2f", $1 * 100}')
   total=$(jq -r '.metrics.http_reqs.values.count // 0' "$SUMMARY")
 else
-  throughput=0 success=0 failed=0 total=0
+  failed=0 total=0
 fi
 
 rm -f "$SUMMARY"

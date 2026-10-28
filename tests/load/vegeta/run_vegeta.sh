@@ -1,15 +1,11 @@
 #!/usr/bin/env bash
-# run_vegeta.sh — ataque Vegeta contra POST /extract con los 4 PDFs oficiales.
-# Perfil D11: 50 req/s × 30s (1.500 reqs), timeout 30s, -insecure.
-# Targets en formato JSON (body base64): Vegeta >= v12 ya no acepta el body embebido en formato HTTP.
-#
-# Env: TARGET_URL (default https://pdf-extractext.localhost/extract), RECORD=0 para ensayo sin registrar,
-#      RATE/DURATION/TIMEOUT para override, KEEP_RESULTS=1 para conservar results.bin.
+# ataque Vegeta contra POST /extract con los 4 PDFs oficiales
 
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
 
-# vegeta puede estar en PATH o en $HOME/go/bin (instalación con `go install`).
+source "$(dirname "$0")/lib/metrics.sh"
+
 VEGETA="$(command -v vegeta 2>/dev/null || true)"
 if [ -z "$VEGETA" ] && [ -x "$HOME/go/bin/vegeta" ]; then
   VEGETA="$HOME/go/bin/vegeta"
@@ -45,7 +41,6 @@ for pdf in "${PDFS[@]}"; do
   [ -f "tests/load/pdfs/$pdf" ] || { echo "ERROR: falta tests/load/pdfs/$pdf" >&2; exit 1; }
 done
 
-# Genera un target JSON por PDF (body multipart en base64), rotados por Vegeta en round-robin.
 TARGETS="$WORK/targets.json"
 : > "$TARGETS"
 for pdf in "${PDFS[@]}"; do
@@ -60,7 +55,6 @@ for pdf in "${PDFS[@]}"; do
 
   b64file="$body.b64"
   base64 -w0 "$body" > "$b64file"
-  # jq lee el base64 desde archivo (-Rs) para evitar "argument list too long" con PDFs grandes.
   jq -cn --arg url "$TARGET_URL" --arg b "$BOUNDARY" \
     '{method:"POST", url:$url, header:{"Content-Type":["multipart/form-data; boundary=\($b)"]}, body:$body}' \
     --rawfile body "$b64file" \
@@ -76,17 +70,12 @@ echo "== Reporte del ataque =="
 "$VEGETA" report --type=text "$WORK/results.bin"
 "$VEGETA" report --type=json "$WORK/results.bin" > "$WORK/report.json"
 
-# --- Métricas globales (unidades del TP: req/s, %, ms) ---
+read -r throughput success p50 p90 p95 <<< "$(parse_vegeta_report_json "$WORK/report.json")"
 if [ -f "$WORK/report.json" ] && [ -s "$WORK/report.json" ]; then
-  p50=$(jq -r '.latencies["50th"] // 0' "$WORK/report.json" | awk '{printf "%.1f", $1 / 1e6}')
-  p95=$(jq -r '.latencies["95th"] // 0' "$WORK/report.json" | awk '{printf "%.1f", $1 / 1e6}')
-  p90=$(jq -r '.latencies["90th"] // 0' "$WORK/report.json" | awk '{printf "%.1f", $1 / 1e6}')
   pmax=$(jq -r '.latencies["max"] // 0' "$WORK/report.json" | awk '{printf "%.1f", $1 / 1e6}')
-  throughput=$(jq -r '.throughput // 0' "$WORK/report.json" | awk '{printf "%.2f", $1}')
-  success=$(jq -r '.success // 0' "$WORK/report.json" | awk '{printf "%.1f", $1 * 100}')
   total=$(jq -r '.requests // 0' "$WORK/report.json")
 else
-  p50=0 p90=0 p95=0 pmax=0 throughput=0 success=0 total=0
+  pmax=0 total=0
 fi
 
 echo
