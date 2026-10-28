@@ -19,7 +19,6 @@ traefik/certs/
 tests/load/.k6-summary.json
 tests/load/.vegeta-results.bin
 tests/load/.vegeta-report.json
-tests/load/vegeta/bodies/
 
 # Corridas de carga: locales; solo TEMPLATE.md se versiona.
 docs/test-runs/*

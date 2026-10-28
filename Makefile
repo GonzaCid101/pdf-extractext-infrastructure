@@ -3,7 +3,7 @@ DOMAIN  := pdf-extractext.localhost
 # Propaga EXTRACTION_REPLICAS (env o `make up EXTRACTION_REPLICAS=N`) al stack.
 export EXTRACTION_REPLICAS
 
-.PHONY: check certs up down build logs ps smoke record-run load-k6 load-vegeta
+.PHONY: check test certs up down build logs ps smoke record-run load-k6 load-vegeta
 
 # certs genera el certificado TLS local con mkcert (nunca versionar).
 certs:
@@ -31,6 +31,35 @@ check:
 			echo "       $(var) en .env a la ruta correcta."; exit 1; } ; \
 		test -f "$$ctx/Dockerfile" || { echo "ERROR: $$ctx no tiene Dockerfile"; exit 1; } ; \
 	)
+
+# test valida sintaxis, configuración y tests rápidos sin levantar contenedores
+test:
+	@echo "== test: sintaxis bash =="
+	@for f in $$(find . -type f -name '*.sh' ! -path '*/\.git/*' ! -path '*/\.opencode/*'); do \
+		bash -n "$$f" || exit 1; \
+	done
+	@echo "OK"
+	@echo "== test: sintaxis python =="
+	@for f in $$(find . -type f -name '*.py' ! -path '*/\.git/*' ! -path '*/\.opencode/*'); do \
+		python3 -m py_compile "$$f" || exit 1; \
+	done
+	@echo "OK"
+	@echo "== test: sintaxis js =="
+	@if command -v node >/dev/null 2>&1; then \
+		for f in $$(find . -type f -name '*.js' ! -path '*/\.git/*' ! -path '*/\.opencode/*'); do \
+			node --check "$$f" || exit 1; \
+		done; \
+		echo "OK"; \
+	else \
+		echo "SKIP (node no disponible)"; \
+	fi
+	@echo "== test: docker compose config =="
+	@if [ -f .env ]; then \
+		$(COMPOSE) config -q || exit 1; \
+	else \
+		$(COMPOSE) --env-file .env.example config -q || exit 1; \
+	fi
+	@echo "OK"
 
 up: check
 	$(COMPOSE) up -d --build

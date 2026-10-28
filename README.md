@@ -44,6 +44,12 @@ make down
 make logs / make ps         # utilidades
 ```
 
+## Testing
+
+- `make test` - Validación rápida sin levantar contenedores (sintaxis bash/python/js, `docker compose config -q`).
+- `make check` - Valida `.env` y contextos de build (requerido por `make up`).
+- `make smoke` - Smoke E2E con stack levantado (requiere `make up` previo).
+
 Dashboard de Traefik: <https://traefik.pdf-extractext.localhost>
 
 ## Escalado de Extraction (1–5 réplicas)
