@@ -70,7 +70,7 @@ test:
 	@echo "OK"
 
 up: check
-	$(COMPOSE) up -d --build
+	$(COMPOSE) up -d --build --remove-orphans
 
 down:
 	$(COMPOSE) down
