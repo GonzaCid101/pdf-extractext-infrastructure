@@ -88,17 +88,19 @@ services:
     expose:
       - "8000" # entrypoint público vía Traefik; no se publica al host
     environment:
-      EXTRACTION_URL: ${EXTRACTION_URL:-http://traefik:8090}
-      EXTRACTION_HOST: ${EXTRACTION_HOST:-extraction.pdf-extractext.localhost}
-      PERSISTENCE_URL: ${PERSISTENCE_URL:-http://persistence:8002}
-      MAX_FILE_SIZE_MB: "${MAX_FILE_SIZE_MB:-16}"
+      CONSUL_HTTP_ADDR: "consul:8500"
+      CONSUL_HTTP_TOKEN: ${CONSUL_HTTP_TOKEN:?falta CONSUL_HTTP_TOKEN en .env}
+      CONSUL_ENABLED: "true"
+      SERVICE_NAME: api
+      SERVICE_PORT: "8000"
+      SERVICE_HEALTH_PATH: /
     deploy:
       resources:
         limits: # tope del TP
           cpus: "1.0"
           memory: 512M
     # > shutdown de 10s de la API: drena requests en vuelo antes del SIGKILL.
-    stop_grace_period: 15s
+    stop_grace_period: 20s
     healthcheck:
       # Exec sin shell: la imagen distroless no tiene curl/wget.
       test: ["CMD", "/healthprobe"]
@@ -113,6 +115,8 @@ services:
         condition: service_healthy
       traefik:
         condition: service_started 
+      consul-seed:
+        condition: service_completed_successfully
     networks:
       - services
 
@@ -126,8 +130,12 @@ services:
       - "8001" # solo red interna
     environment:
       WEB_CONCURRENCY: ${EXTRACTION_WORKERS:-1}
-      MAX_CONCURRENCY: ${EXTRACTION_MAX_CONCURRENCY:-1}
-      RETRY_AFTER_SECONDS: ${EXTRACTION_RETRY_AFTER_SECONDS:-1}
+      CONSUL_HTTP_ADDR: "consul:8500"
+      CONSUL_HTTP_TOKEN: ${CONSUL_HTTP_TOKEN:?falta CONSUL_HTTP_TOKEN en .env}
+      CONSUL_ENABLED: "true"
+      SERVICE_NAME: extraction
+      SERVICE_PORT: "8001"
+      SERVICE_HEALTH_PATH: /readyz
     deploy:
       replicas: ${EXTRACTION_REPLICAS:-1}
       resources:
@@ -136,6 +144,9 @@ services:
           memory: 1G
     # > graceful_timeout de gunicorn (30s): drena la extracción en curso.
     stop_grace_period: 35s
+    depends_on:
+      consul-seed:
+        condition: service_completed_successfully
     networks:
       - services
     healthcheck:
@@ -155,16 +166,24 @@ services:
       - "8002" # solo red interna
     environment:
       MONGO_URI: mongodb://${MONGO_INITDB_ROOT_USERNAME:-dev}:${MONGO_INITDB_ROOT_PASSWORD:-dev}@mongodb:27017
+      CONSUL_HTTP_ADDR: "consul:8500"
+      CONSUL_HTTP_TOKEN: ${CONSUL_HTTP_TOKEN:?falta CONSUL_HTTP_TOKEN en .env}
+      CONSUL_ENABLED: "true"
+      SERVICE_NAME: persistence
+      SERVICE_PORT: "8002"
+      SERVICE_HEALTH_PATH: /health/ready
     depends_on:
       mongodb:
         condition: service_healthy
+      consul-seed:
+        condition: service_completed_successfully
     deploy:
       resources:
         limits: # tope del TP
           cpus: "1.0"
           memory: 512M
     # > shutdown de 10s del servicio: drena requests y cierra MongoDB limpio.
-    stop_grace_period: 15s
+    stop_grace_period: 20s
     networks:
       - services
       - data # único servicio con acceso a MongoDB

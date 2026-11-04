@@ -77,7 +77,8 @@ repos de los servicios.
 
 ### D9. Healthchecks (mecanismo real, sin `curl` en contenedores)
 - `depends_on: service_healthy` donde existe healthcheck; arranque ordenado:
-  `mongodb` healthy → `persistence` healthy → `extraction` healthy → `api`
+  `consul` healthy → `consul-seed` completado → `mongodb` healthy →
+  `persistence` healthy → `extraction` healthy → `api`
   (que además espera a `persistence` y `traefik` en `started`).
 - **Decisión:** healthchecks in-container con las herramientas nativas de cada
   runtime, **sin instalar `curl`**:
@@ -137,8 +138,11 @@ repos de los servicios.
 - El servicio `api` se construye desde `API_CONTEXT` (repo hermano) con tag
   `API_TAG`; red `services` únicamente (sin acceso a `data`); expone `:8000`
   solo a la red interna (no publicado al host).
-- Env inyectadas: `EXTRACTION_URL=http://traefik:8090` (entrypoint interno,
-  ver D3), `PERSISTENCE_URL=http://persistence:8002`, `MAX_FILE_SIZE_MB=16`.
+- Env de conexión inyectadas: `CONSUL_HTTP_ADDR=consul:8500`,
+  `CONSUL_HTTP_TOKEN`, `CONSUL_ENABLED=true`, `SERVICE_NAME`, `SERVICE_PORT` y
+  `SERVICE_HEALTH_PATH`. Los tunables y las URLs internas
+  (`EXTRACTION_URL`, `PERSISTENCE_URL`, `MAX_FILE_SIZE_MB`, etc.) se leen del
+  KV (D8); el router público lo publica la API en `Tags` al registrarse.
 - Router público `Host(pdf-extractext.localhost)` en entrypoint `https` con
   TLS (mkcert); la redirección :80→:443 es global en la config estática, por lo
   que no se define un router HTTP redundante.
