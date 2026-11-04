@@ -31,8 +31,9 @@ repos de los servicios.
   routers públicos redirigen :80 → :443.
 - **Contexto:** el repo docente no tiene servicios que se llamen entre sí;
   nosotros sí, y las llamadas internas HTTP+Host-header no deben recibir un 301.
-- **Balanceo:** Traefik balancea entre réplicas de Extraction (labels docker
-  + `deploy.replicas`); API consume `EXTRACTION_URL=http://traefik:8090` con
+- **Balanceo:** Traefik balancea entre réplicas de Extraction (provider
+  `consulCatalog` + `Tags` del servicio y `deploy.replicas`); API consume
+  `EXTRACTION_URL=http://traefik:8090` con
   `Host: extraction.pdf-extractext.localhost`.
 
 ### D4. Aislamiento por redes
@@ -54,7 +55,27 @@ repos de los servicios.
   `mongo:8` por defecto (helper `mongoImage()`, sobreescribible con
   `MONGO_TEST_IMAGE`) y su README quedó alineado.
 
-### D8. Healthchecks (mecanismo real, sin `curl` en contenedores)
+### D8. Consul: registro de servicios y configuración (12-Factor)
+- **Decisión:** Consul server único (`bootstrap_expect: 1`) como registro de
+  servicios y fuente de configuración no secreta (KV). ACL habilitada con
+  `default_policy: allow` para el alcance del TP; el token viaja en
+  `CONSUL_HTTP_TOKEN` (nunca versionado) y toda llamada HTTP envía
+  `X-Consul-Token`.
+- **Ruteo:** Traefik descubre routers con el provider `consulCatalog`
+  (`http://consul:8500`, `refreshInterval: 5s`). Los servicios publican sus
+  reglas funcionales en `Tags`; `Meta` replica las mismas claves
+  `traefik.*` + `version` + `commit` como espejo documental y **no** enruta.
+- **Identidad:** `ID = <servicio>-<hostname>` (único por réplica), `Address`
+  con la IP de la red `services` y check HTTP propio con
+  `DeregisterCriticalServiceAfter: 1m`.
+- **KV:** claves `pdf-extractext/config/<servicio>/<CLAVE>` para tunables no
+  secretos y URLs/Hosts internos. Precedencia `env > KV > default`; los
+  secretos (`MONGO_URI`, `CONSUL_HTTP_TOKEN`) viven solo en `.env`.
+- **Descartado:** labels Docker para las apps (duplicaría routers
+  `@docker`/`@consulcatalog`), leer `Meta` en Traefik v3.5 (no construye
+  routers) y el SDK de Consul (los servicios usan `net/http`/`urllib`).
+
+### D9. Healthchecks (mecanismo real, sin `curl` en contenedores)
 - `depends_on: service_healthy` donde existe healthcheck; arranque ordenado:
   `mongodb` healthy → `persistence` healthy → `extraction` healthy → `api`
   (que además espera a `persistence` y `traefik` en `started`).
@@ -73,7 +94,7 @@ repos de los servicios.
 - **Descartado:** `CMD-SHELL` con `curl -f http://localhost:<PUERTO>/readyz`
   (requería instalar `curl`/shell).
 
-### D9. Límites de recursos
+### D10. Límites de recursos
 - Todos los servicios tienen límite explícito de CPU y memoria por
   instancia (exigencia del TP):
   - `extraction`: `cpus: '1.0'`, `memory: 1G` por réplica.
@@ -81,29 +102,29 @@ repos de los servicios.
   - `traefik`: `cpus: '0.5'`, `memory: 512M`.
   - `mongodb`: `cpus: '1.0'`, `memory: 1G`.
 - Réplicas de Extraction parametrizables con `EXTRACTION_REPLICAS` (1–5,
-  default 1); el balanceo lo resuelve Traefik vía provider docker (D3).
+  default 1); el balanceo lo resuelve Traefik vía provider consulCatalog (D3, D8).
 
-### D10. Saturación: 503 controlado (coordinación)
+### D11. Saturación: 503 controlado (coordinación)
 - Rechazo con 503 + `Retry-After` lo implementa Extraction (su issue) con el
-  code `SERVICE_OVERLOADED` (ver D16); la API lo propaga tal cual (FIND-012).
+  code `SERVICE_OVERLOADED` (ver D17); la API lo propaga tal cual (FIND-012).
 - El TP admite 429, pero 429 es semántica de rate-limit por consumidor y no
   figura en el catálogo contractual. Infra no participa.
 
-### D11. Herramienta de carga: k6 + Vegeta
+### D12. Herramienta de carga: k6 + Vegeta
 - Perfil del TP: k6 abierto ≥25 req/s, spike 100 VUs; Vegeta 50 req/s x 30s.
 - Suite en `tests/load/` (k6 + Vegeta contra el dominio público, 4 PDFs
   oficiales versionados, registro de corridas en `docs/test-runs/`).
 
-### D12. Sin CI por ahora
+### D13. Sin CI por ahora
 - `make smoke` corre solo local. CI se evalúa en issue aparte.
 
-### D13. Sin herramientas adicionales
+### D14. Sin herramientas adicionales
 - Stack fijo: Docker Compose v2, Traefik v3, Mongo oficial, Make, Bash, curl.
 - Si Bash/Make no alcanzan, se evalúa en una issue antes de agregar nada.
 
 ## Coordinación (se implementan en otros repos)
 
-### D14. Contrato de Extraction: manda el TP del docente
+### D15. Contrato de Extraction: manda el TP del docente
 - Entrada: **únicamente** multipart/form-data (decisión del equipo; se
   descarta binario directo / `application/octet-stream`).
 - Salida 200: `{"content": "...", "page_count": N}`.
@@ -112,7 +133,7 @@ repos de los servicios.
   extra; la API lo reenvía a Persistence en `POST /documents` (índice único
   `checksum_1`).
 
-### D15. API Service en el compose (✅ RESUELTA)
+### D16. API Service en el compose (✅ RESUELTA)
 - El servicio `api` se construye desde `API_CONTEXT` (repo hermano) con tag
   `API_TAG`; red `services` únicamente (sin acceso a `data`); expone `:8000`
   solo a la red interna (no publicado al host).
@@ -122,7 +143,7 @@ repos de los servicios.
   TLS (mkcert); la redirección :80→:443 es global en la config estática, por lo
   que no se define un router HTTP redundante.
 
-### D16. Errores RFC 9457 en los tres servicios (CON-018/CON-019)
+### D17. Errores RFC 9457 en los tres servicios (CON-018/CON-019)
 - Decisión: todos los errores responden `application/problem+json` (RFC 9457)
   con `type` (URN `urn:pdf-extractext:<slug>`), `title`, `status`, `detail` +
   el miembro de extensión `code`; Persistence añade `document` en el 409.
@@ -134,7 +155,7 @@ repos de los servicios.
 
 ## Restricciones aceptadas por diseño (Etapa 3C)
 
-### D17. Nombre de proyecto fijo `pdf-extractext` (FIND-037)
+### D18. Nombre de proyecto fijo `pdf-extractext` (FIND-037)
 - **Decisión:** se acepta el acoplamiento al nombre de proyecto: `name: pdf-extractext`
   en el compose fija `providers.docker.network: pdf-extractext_services` y los
   nombres de contenedor que usa el smoke.
@@ -142,7 +163,7 @@ repos de los servicios.
   de Traefik y los checks; es un proyecto único del TP, no una librería reutilizable.
 - **Descartado:** derivar red/contenedores por env (fricción sin beneficio real aquí).
 
-### D18. Digests solo en la imagen de la API (FIND-044)
+### D19. Digests solo en la imagen de la API (FIND-044)
 - **Decisión:** se mantiene el pinneo por digest únicamente en `pdf-extractext-api`
   (base de build y runtime distroless). Persistence y Extraction usan tags por
   versión (`golang:1.27-alpine`, `python:3.12-slim`).
@@ -150,11 +171,12 @@ repos de los servicios.
   al objetivo del TP; se cierra como **riesgo bajo aceptado** (supply-chain).
 - **Descartado:** pinnear digests en los tres (reproducibilidad bit-a-bit fuera de alcance).
 
-### D19. Traefik sin healthcheck HTTP propio ni forwardingTimeouts (FIND-035)
+### D20. Traefik sin healthcheck HTTP propio ni forwardingTimeouts (FIND-035)
 - **Decisión:** el borde no declara `serversTransport.forwardingTimeouts` ni
-  `loadbalancer.healthcheck.*`; la exclusión de réplicas degradadas la hace el
-  healthcheck de Docker (provider docker con `allowEmptyServices=false`) y los
-  timeouts efectivos los impone el cliente de la API (30 s) + `IdleTimeout` 120 s.
+  `loadbalancer.healthcheck.*`; la exclusión de réplicas degradadas la hacen
+  los checks de Consul (el provider `consulCatalog` solo enruta instancias
+  `passing`, D8) y los timeouts efectivos los impone el cliente de la API
+  (30 s) + `IdleTimeout` 120 s.
 - **Contexto:** sin corrida de carga no se cuantifica el impacto; la ventana de
   exclusión es ≈ intervalo×retries (10 s × 5).
 - **Descartado (por ahora):** topes en el borde; se reevalúan en la Etapa 4 solo

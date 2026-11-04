@@ -40,7 +40,7 @@ Dos redes aíslan el flujo de datos:
 - **Red `data`**: solo MongoDB y Persistence. Únicamente Persistence accede a la
   base, lo que reduce la superficie de ataque y concentra la validación de datos.
 
-Cada contenedor tiene límite explícito de CPU y memoria (ADR D9), base del
+Cada contenedor tiene límite explícito de CPU y memoria (ADR D10), base del
 escalado horizontal controlado:
 
 | Servicio | cpus | memoria | Réplicas |
@@ -53,7 +53,7 @@ escalado horizontal controlado:
 
 ## 2. Justificación de Decisiones Arquitectónicas Clave
 
-### 2.1 Traefik como API Gateway y Balanceador (D1, D3, D17, D19)
+### 2.1 Traefik como API Gateway y Balanceador (D1, D3, D18, D20)
 
 - **Integración nativa con Docker:** auto-descubre los servicios por labels y
   actualiza rutas y balanceo al iniciar o detener contenedores, sin
@@ -67,11 +67,11 @@ escalado horizontal controlado:
   servicios (API → Extraction). El dashboard de Traefik se restringe a este
   entrypoint interno y no se expone en el borde (D1, `FIND-036`).
 - **Restricciones aceptadas por diseño:** el borde no declara healthcheck HTTP
-  propio ni `forwardingTimeouts` (D19, `FIND-035`); la exclusión de réplicas
+  propio ni `forwardingTimeouts` (D20, `FIND-035`); la exclusión de réplicas
   degradadas la hace el healthcheck de Docker y los timeouts efectivos los
-  impone el cliente de la API. El nombre de proyecto es fijo (D17).
+  impone el cliente de la API. El nombre de proyecto es fijo (D18).
 
-### 2.2 Escalabilidad horizontal de Extraction (D3, D9)
+### 2.2 Escalabilidad horizontal de Extraction (D3, D10)
 
 Extraction se escala de 1 a 5 réplicas con `EXTRACTION_REPLICAS` (validado en
 `make check`). Como cada réplica es un proceso stateless sin puertos publicados
@@ -79,7 +79,7 @@ ni volúmenes, el escalado no requiere coordinación: Traefik reparte el tráfic
 round-robin entre las réplicas healthy. Esta es la **palanca principal** del TP
 (sección *Estrategia de réplicas y Balanceo*).
 
-### 2.3 Saturación: backpressure con HTTP 503 (D10)
+### 2.3 Saturación: backpressure con HTTP 503 (D11)
 
 Al superar `MAX_CONCURRENCY` por réplica, el `AdmissionMiddleware` de Extraction
 rechaza de inmediato con **503 + `Retry-After`** (code `SERVICE_OVERLOADED`),
@@ -87,14 +87,14 @@ rechaza de inmediato con **503 + `Retry-After`** (code `SERVICE_OVERLOADED`),
 control de admisión real del sistema; la API no tiene rate-limit propio (el
 rechazo efectivo lo produce Extraction, escalable 1→5 réplicas).
 
-### 2.4 Contrato de Extraction (D14)
+### 2.4 Contrato de Extraction (D15)
 
 Entrada **únicamente** `multipart/form-data` con campo `file` (streaming por
 `io.Pipe` en la API, sin volcar a disco). Salida 200 con
 `{"content": "...", "page_count": N}`. El SHA-256 lo calcula Extraction y la API
 lo reenvía a Persistence para el índice único `checksum_1`.
 
-### 2.5 Errores unificados: RFC 9457 (D16)
+### 2.5 Errores unificados: RFC 9457 (D17)
 
 Los tres servicios responden `application/problem+json` con `type` (URN),
 `title`, `status`, `detail` y el miembro de extensión `code`. La API **propaga**
@@ -158,7 +158,7 @@ las corridas de carga quedan pendientes (§6).
 | Timeouts de servidor | `ReadTimeout`/`WriteTimeout`/`IdleTimeout` en Fiber y `http.Server` | `FIND-025` |
 | Detección de timeout | `isTimeout` unificado → 504 `GATEWAY_TIMEOUT` | `FIND-031` |
 | Límite de entrada | `MAX_FILE_SIZE_MB=16` (bajo el umbral de spool de fasthttp) | `FIND-030` |
-| Prop. de errores | 4xx/503 del extractor propagados con `Retry-After`; RFC 9457 en los 3 servicios | `FIND-012`/`FIND-015`; D16 |
+| Prop. de errores | 4xx/503 del extractor propagados con `Retry-After`; RFC 9457 en los 3 servicios | `FIND-012`/`FIND-015`; D17 |
 | Correlación | `X-Request-ID` generado y propagado a todos los upstreams | `FIND-014` |
 | Contenedores | API y Persistence nonroot; `stop_grace_period` 35 s (extraction) / 15 s | `FIND-032`/`FIND-033`/`FIND-034` |
 | Superficie de ataque | Dashboard de Traefik restringido al entrypoint interno | `FIND-036` |

@@ -87,7 +87,7 @@ ps:
 smoke: check
 	bash scripts/smoke.sh
 
-# Pruebas de carga (ADR D11): k6 spike y Vegeta 50 req/s × 30s contra
+# Pruebas de carga (ADR D12): k6 spike y Vegeta 50 req/s × 30s contra
 # https://pdf-extractext.localhost/extract; registran en docs/test-runs/.
 # RECORD=0 corre como ensayo sin registrar (p. ej. contra un mock).
 load-k6: check

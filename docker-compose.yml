@@ -53,6 +53,11 @@ services:
       - ./traefik/dynamic:/etc/traefik/dynamic:ro
       - ./traefik/certs:/etc/certs:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      TRAEFIK_PROVIDERS_CONSULCATALOG_ENDPOINT_TOKEN: ${CONSUL_HTTP_TOKEN:?falta CONSUL_HTTP_TOKEN en .env}
+    depends_on:
+      consul:
+        condition: service_healthy
     networks:
       - services
 
@@ -90,12 +95,6 @@ services:
         condition: service_healthy
       traefik:
         condition: service_started 
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.api.rule=Host(`pdf-extractext.localhost`)
-      - traefik.http.routers.api.entrypoints=https
-      - traefik.http.routers.api.tls=true
-      - traefik.http.services.api.loadbalancer.server.port=8000
     networks:
       - services
 
@@ -111,11 +110,6 @@ services:
       WEB_CONCURRENCY: ${EXTRACTION_WORKERS:-1}
       MAX_CONCURRENCY: ${EXTRACTION_MAX_CONCURRENCY:-1}
       RETRY_AFTER_SECONDS: ${EXTRACTION_RETRY_AFTER_SECONDS:-1}
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.extraction.rule=Host(`extraction.pdf-extractext.localhost`)
-      - traefik.http.routers.extraction.entrypoints=internal
-      - traefik.http.services.extraction.loadbalancer.server.port=8001
     deploy:
       replicas: ${EXTRACTION_REPLICAS:-1}
       resources:

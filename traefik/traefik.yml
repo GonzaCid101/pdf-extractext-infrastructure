@@ -21,6 +21,11 @@ api:
   dashboard: true
 
 providers:
+  consulCatalog:
+    endpoint:
+      address: http://consul:8500
+    exposedByDefault: false # solo se enrutan servicios con Tags explícitos
+    refreshInterval: 5s
   docker:
     endpoint: "unix:///var/run/docker.sock"
     watch: true
