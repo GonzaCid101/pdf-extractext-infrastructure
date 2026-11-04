@@ -30,7 +30,8 @@ entrypoint lo inyecta en `/tmp/consul.json` porque el bind mount de
 La UI se expone solo por el entrypoint interno de Traefik:
 
 ```bash
-curl -H 'Host: consul.pdf-extractext.localhost' http://traefik:8090/ui/
+docker run --rm --network pdf-extractext_services curlimages/curl:8.10.1 \
+  -H 'Host: consul.pdf-extractext.localhost' http://traefik:8090/ui/
 ```
 
 ## KV
