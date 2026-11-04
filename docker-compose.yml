@@ -34,6 +34,24 @@ services:
       - traefik.http.routers.consul.entrypoints=internal
       - traefik.http.services.consul.loadbalancer.server.port=8500
 
+  consul-seed:
+    image: hashicorp/consul:2.0.4@sha256:1c59f007df8ea1c21b2558dc73ef8d99047bc895d9e52e635d1e745e35fe9a54
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+    entrypoint: ["/bin/sh", "/consul/seed/seed.sh"]
+    environment:
+      CONSUL_HTTP_ADDR: http://consul:8500
+      CONSUL_HTTP_TOKEN: ${CONSUL_HTTP_TOKEN:?falta CONSUL_HTTP_TOKEN en .env}
+      SEED_FORCE: ${SEED_FORCE:-false}
+    volumes:
+      - ./consul/seed:/consul/seed:ro
+    depends_on:
+      consul:
+        condition: service_healthy
+    networks:
+      - services
+
   traefik:
     image: traefik:v3
     restart: unless-stopped

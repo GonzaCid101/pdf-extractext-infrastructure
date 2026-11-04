@@ -3,7 +3,7 @@ DOMAIN  := pdf-extractext.localhost
 # Propaga EXTRACTION_REPLICAS (env o `make up EXTRACTION_REPLICAS=N`) al stack.
 export EXTRACTION_REPLICAS
 
-.PHONY: check test certs up down build logs ps smoke record-run load-k6 load-vegeta
+.PHONY: check test certs up down build logs ps smoke record-run load-k6 load-vegeta kv-seed
 
 # certs genera el certificado TLS local con mkcert (nunca versionar).
 certs:
@@ -86,6 +86,10 @@ ps:
 
 smoke: check
 	bash scripts/smoke.sh
+
+# kv-seed carga consul/seed/keys.env sin pisar claves existentes (SEED_FORCE=true las pisa).
+kv-seed:
+	bash scripts/consul-kv-seed.sh
 
 # Pruebas de carga (ADR D12): k6 spike y Vegeta 50 req/s × 30s contra
 # https://pdf-extractext.localhost/extract; registran en docs/test-runs/.
