@@ -99,7 +99,7 @@ services:
         limits: # tope del TP
           cpus: "1.0"
           memory: 512M
-    # > shutdown de 10s de la API: drena requests en vuelo antes del SIGKILL.
+    # > shutdown de 10s de la API + 5s de deregistro: drena requests antes del SIGKILL.
     stop_grace_period: 20s
     healthcheck:
       # Exec sin shell: la imagen distroless no tiene curl/wget.
@@ -142,7 +142,7 @@ services:
         limits:
           cpus: "1.0"
           memory: 1G
-    # > graceful_timeout de gunicorn (30s): drena la extracción en curso.
+    # > graceful_timeout de gunicorn (30s) + 5s de deregistro: drena la extracción en curso.
     stop_grace_period: 35s
     depends_on:
       consul-seed:
@@ -182,7 +182,7 @@ services:
         limits: # tope del TP
           cpus: "1.0"
           memory: 512M
-    # > shutdown de 10s del servicio: drena requests y cierra MongoDB limpio.
+    # > shutdown de 10s + 5s de deregistro: drena requests y cierra MongoDB limpio.
     stop_grace_period: 20s
     networks:
       - services
