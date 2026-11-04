@@ -3,7 +3,7 @@ DOMAIN  := pdf-extractext.localhost
 # Propaga EXTRACTION_REPLICAS (env o `make up EXTRACTION_REPLICAS=N`) al stack.
 export EXTRACTION_REPLICAS
 
-.PHONY: check test certs up down build logs ps smoke record-run load-k6 load-vegeta kv-seed
+.PHONY: check test test-infra consul-check certs up down build logs ps smoke record-run load-k6 load-vegeta kv-seed
 
 # certs genera el certificado TLS local con mkcert (nunca versionar).
 certs:
@@ -69,10 +69,25 @@ test:
 	fi
 	@echo "OK"
 
-up: check
-	$(COMPOSE) up -d --build --remove-orphans
+# test-infra corre la suite de contrato de Consul/Traefik/KV sin levantar el stack.
+test-infra:
+	@bash scripts/tests/run.sh
+	@echo "== test-infra: sintaxis bash =="
+	@for f in $$(find scripts consul -type f -name '*.sh'); do bash -n "$$f" || exit 1; done
+	@echo "OK"
+	@echo "== test-infra: shellcheck =="
+	@if command -v shellcheck >/dev/null 2>&1; then \
+		shellcheck scripts/*.sh consul/entrypoint.sh consul/seed/seed.sh || exit 1; \
+	else \
+		echo "SKIP (shellcheck no disponible; se usó bash -n)"; \
+	fi
 
-down:
+# consul-check verifica leader, catálogo y claves del KV (requiere el stack arriba).
+consul-check:
+	bash scripts/consul-check.sh
+
+up: check
+	$(COMPOSE) up -d --build --remove-orphansdown:
 	$(COMPOSE) down
 
 build: check

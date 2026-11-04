@@ -1,23 +1,28 @@
 # pdf-extractext-infrastructure
 
 Bootstrap de infraestructura de **PDF Extractext** (microservicios con Docker
-Compose y Traefik).
+Compose, Traefik y Consul).
 
 ```
-Traefik (:80→:443 TLS mkcert)
+Consul (:8500, red `services`) ◀── registro de servicios + KV
+Traefik (:80→:443 TLS mkcert; :8090 interno)
     ▼ red `services`
 API (:8000, HTTPS público)
   ├─ Persistence (:8002, /health)
   └─ Traefik :8090 (interno, no publicado)
-       ▰ balanceo vía Traefik
+       ▰ balanceo vía consulCatalog
     Extraction (:8001, /health)
                                       ▼ red `data`
 MongoDB ◀─ solo Persistence; 27017 no publicado; volumen nombrado
 ```
 
 La API es el único entrypoint público (`https://pdf-extractext.localhost`).
-Consume Extraction vía Traefik :8090 y Persistence directo por la red
-`services`.
+Consume Extraction vía Traefik :8090 y Persistence por el router interno.
+
+> **Estado (Paso 1):** Consul, el KV y el provider `consulCatalog` ya están
+> operativos. El registro de `api`, `extraction` y `persistence` y la lectura
+> del KV se implementan en los Pasos 2–4; hasta entonces el smoke E2E completo
+> no aplica y se usa `SMOKE_PHASE=infra make smoke`.
 
 ## Requisitos
 
@@ -39,14 +44,63 @@ Consume Extraction vía Traefik :8090 y Persistence directo por la red
 cp .env.example .env        # ajustá *_CONTEXT si tus rutas difieren
 make certs                  # TLS local con mkcert (una vez por máquina)
 make up                     # valida contextos y levanta todo
-make smoke                  # verifica los 15 checks
+make consul-check           # leader de Consul + KV cargado
+make test-infra             # suite de contrato de infraestructura
+make smoke                  # smoke E2E (cuando los Pasos 2–4 estén listos)
 make down
 make logs / make ps         # utilidades
 ```
 
+Para validar solo la infraestructura mientras los servicios aún no se registran:
+
+```bash
+docker compose up -d consul consul-seed traefik
+SMOKE_PHASE=infra make smoke
+```
+
+## Consul y KV
+
+- **UI interna:** solo accesible por el entrypoint `internal` de Traefik:
+
+  ```bash
+  docker run --rm --network pdf-extractext_services curlimages/curl:8.10.1 \
+    -H 'Host: consul.pdf-extractext.localhost' http://traefik:8090/ui/
+  ```
+
+- **Leer el KV:**
+
+  ```bash
+  docker compose exec consul consul kv get -recurse pdf-extractext/config/
+  ```
+
+- **Cargar/forzar el seed:** `make kv-seed` (envuelve `scripts/consul-kv-seed.sh`):
+
+  ```bash
+  make kv-seed                    # no pisa claves existentes
+  SEED_FORCE=true make kv-seed    # sobrescribe con consul/seed/keys.env
+  ```
+
+- **Rotar el token:** reemplazá `CONSUL_HTTP_TOKEN` en `.env` y recreá el
+  volumen de Consul (el token queda persistido en `/consul/data`):
+
+  ```bash
+  docker compose rm -sf consul consul-seed
+  docker volume rm pdf-extractext-consul-data
+  make up
+  ```
+
+- **Resetear el volumen de Consul:**
+
+  ```bash
+  docker compose down
+  docker volume rm pdf-extractext-consul-data
+  ```
+
 ## Testing
 
 - `make test` - Validación rápida sin levantar contenedores (sintaxis bash/python/js, `docker compose config -q`).
+- `make test-infra` - Suite de contrato de Consul, Traefik, KV y compose (sin stack); usa `shellcheck` si está instalado.
+- `make consul-check` - Leader, catálogo y claves del KV con el stack arriba.
 - `make check` - Valida `.env` y contextos de build (requerido por `make up`).
 - `make smoke` - Smoke E2E con stack levantado (requiere `make up` previo).
 

@@ -11,9 +11,20 @@ COMPOSE="docker compose"
 CURL_IMG="curlimages/curl:8.10.1"
 NET_SERVICES="pdf-extractext_services"
 FAILURES=0
+SMOKE_PHASE="${SMOKE_PHASE:-full}"
 
 ok()   { echo "PASS  $*"; }
 fail() { echo "FAIL  $*"; FAILURES=$((FAILURES + 1)); }
+
+finish() {
+  echo
+  if [ "$FAILURES" = "0" ]; then
+    echo "SMOKE OK — todos los checks pasaron"
+    exit 0
+  fi
+  echo "SMOKE FALLÓ — $FAILURES check(s) fallaron"
+  exit 1
+}
 
 ENV_REPLICAS="${EXTRACTION_REPLICAS:-}"
 set -a; . ./.env; set +a
@@ -25,8 +36,8 @@ echo "== Smoke tests: bootstrap pdf-extractext =="
 check_stack() {
   $COMPOSE up -d --build >/dev/null
   UP=$($COMPOSE ps --status running --format '{{.Service}}' | sort -u | tr '\n' ' ')
-  if [ "$UP" = "api extraction mongodb persistence traefik " ]; then
-    ok "1. los 5 servicios están running"
+  if [ "$UP" = "api consul extraction mongodb persistence traefik " ]; then
+    ok "1. los 6 servicios están running"
   else
     fail "1. servicios running inesperados: [$UP]"
   fi
@@ -130,6 +141,53 @@ check_network_isolation() {
   fi
 }
 
+consul_api() {
+  $COMPOSE exec -T consul wget -qO- \
+    --header="X-Consul-Token: ${CONSUL_HTTP_TOKEN}" \
+    "http://127.0.0.1:8500$1" 2>/dev/null
+}
+
+check_infra_consul() {
+  local status
+  status=$(docker inspect -f '{{.State.Health.Status}}' "$($COMPOSE ps -q consul)" 2>/dev/null || echo missing)
+  [ "$status" = "healthy" ] && ok "I1. Consul healthy" \
+                            || fail "I1. Consul health status: $status"
+
+  if bash scripts/consul-check.sh >/dev/null; then
+    ok "I2. Consul con leader y KV cargado"
+  else
+    fail "I2. consul-check falló (leader o KV incompletos)"
+  fi
+}
+
+check_traefik_consulcatalog() {
+  local overview
+  overview=$(docker run --rm --network "$NET_SERVICES" "$CURL_IMG" \
+    -s --max-time 5 -H "Host: traefik.pdf-extractext.localhost" \
+    http://traefik:8090/api/overview || true)
+  printf '%s' "$overview" | grep -qi 'consulcatalog' \
+    && ok "I3. Traefik con provider consulCatalog" \
+    || fail "I3. Traefik sin provider consulCatalog"
+
+  if $COMPOSE logs traefik 2>&1 | grep -Eiq 'consul.*(403|permission denied|acl not found)'; then
+    fail "I4. Traefik con errores de ACL contra Consul"
+  else
+    ok "I4. Traefik sin errores de ACL contra Consul"
+  fi
+}
+
+check_catalog_pending() {
+  local services service
+  services=$(consul_api /v1/catalog/services || true)
+  for service in api extraction persistence; do
+    if printf '%s' "$services" | grep -q "\"$service\""; then
+      ok "I5. $service registrado en el catálogo"
+    else
+      echo "PENDIENTE PASO 5: $service no registrado todavía"
+    fi
+  done
+}
+
 fixture_pdf() {
   local out=$1 i xref
   local stream='BT /F1 12 Tf 72 720 Td (pdf-extractext smoke test) Tj ET'
@@ -165,7 +223,7 @@ wait_api_200() {
 }
 
 check_e2e_extract() {
-  local SMOKE_TMP FIXTURE code
+  local FIXTURE code
   SMOKE_TMP=$(mktemp -d)
   trap 'rm -rf "$SMOKE_TMP"' EXIT
   FIXTURE="$SMOKE_TMP/fixture.pdf"
@@ -231,6 +289,13 @@ check_git_hygiene() {
                       || fail "14. hay secretos o datos runtime versionados"
 }
 
+if [ "$SMOKE_PHASE" = "infra" ]; then
+  check_infra_consul
+  check_traefik_consulcatalog
+  check_catalog_pending
+  finish
+fi
+
 wait_dashboard || true
 wait_mongo_healthy || true
 
@@ -240,10 +305,4 @@ check_e2e_extract
 check_persistence
 check_git_hygiene
 
-echo
-if [ "$FAILURES" = "0" ]; then
-  echo "SMOKE OK — todos los checks pasaron"
-else
-  echo "SMOKE FALLÓ — $FAILURES check(s) fallaron"
-  exit 1
-fi
+finish
