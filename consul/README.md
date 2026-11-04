@@ -1,0 +1,43 @@
+# Consul — registro de servicios y configuración
+
+Consul corre como server único (`bootstrap_expect: 1`) dentro de la red
+`services`. Su puerto `8500` no se publica al host: la UI y la API HTTP solo son
+alcanzables desde la red interna.
+
+## Endpoints
+
+| Uso | Endpoint |
+| --- | --- |
+| Leader | `GET /v1/status/leader` |
+| Catálogo | `GET /v1/catalog/services` |
+| Registro | `PUT /v1/agent/service/register` |
+| Baja | `PUT /v1/agent/service/deregister/<id>` |
+| Health passing | `GET /v1/health/service/<servicio>?passing=true` |
+| KV | `GET/PUT /v1/kv/<clave>` (`?recurse` para prefijos) |
+
+Todas las llamadas HTTP deben enviar `X-Consul-Token: $CONSUL_HTTP_TOKEN`. El CLI
+(`consul kv`, `consul members`, etc.) toma el token de `CONSUL_HTTP_TOKEN`.
+
+## ACL
+
+La configuración se renderiza desde `config/consul.json.tmpl` al arrancar. El
+token de desarrollo vive en `.env` (`CONSUL_HTTP_TOKEN`) y nunca se versiona; el
+entrypoint lo inyecta en `/tmp/consul.json` porque el bind mount de
+`/consul/config` es de solo lectura.
+
+## UI
+
+La UI se expone solo por el entrypoint interno de Traefik:
+
+```bash
+curl -H 'Host: consul.pdf-extractext.localhost' http://traefik:8090/ui/
+```
+
+## KV
+
+Las claves siguen `pdf-extractext/config/<servicio>/<CLAVE>`. Se cargan con
+`scripts/consul-kv-seed.sh` (o el servicio efímero `consul-seed`) y se leen con:
+
+```bash
+docker compose exec consul consul kv get -recurse pdf-extractext/config/
+```

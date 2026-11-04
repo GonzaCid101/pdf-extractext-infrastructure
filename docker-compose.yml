@@ -3,6 +3,37 @@ name: pdf-extractext
 # Infraestructura de PDF Extractext.
 
 services:
+  consul:
+    image: hashicorp/consul:2.0.4@sha256:1c59f007df8ea1c21b2558dc73ef8d99047bc895d9e52e635d1e745e35fe9a54
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    entrypoint: ["/bin/sh", "/consul/entrypoint.sh"]
+    environment:
+      CONSUL_HTTP_TOKEN: ${CONSUL_HTTP_TOKEN:?falta CONSUL_HTTP_TOKEN en .env}
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+    volumes:
+      - ./consul/config:/consul/config:ro
+      - ./consul/entrypoint.sh:/consul/entrypoint.sh:ro
+      - consul_data:/consul/data
+    networks:
+      - services
+    healthcheck:
+      test: ["CMD", "consul", "members"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.consul.rule=Host(`consul.pdf-extractext.localhost`)
+      - traefik.http.routers.consul.entrypoints=internal
+      - traefik.http.services.consul.loadbalancer.server.port=8500
+
   traefik:
     image: traefik:v3
     restart: unless-stopped
@@ -163,3 +194,5 @@ networks:
 volumes:
   mongo_data:
     name: pdf-extractext-mongo-data
+  consul_data:
+    name: pdf-extractext-consul-data
