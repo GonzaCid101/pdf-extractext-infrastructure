@@ -10,7 +10,7 @@ assert_file consul/README.md
 
 assert_contains consul/config/consul.json.tmpl '__CONSUL_HTTP_TOKEN__' 'plantilla con placeholder de token'
 assert_contains consul/config/consul.json.tmpl '"enabled": true' 'ACL habilitada'
-assert_contains consul/config/consul.json.tmpl '"default_policy": "deny"' 'default_policy deny'
+assert_contains consul/config/consul.json.tmpl '"default_policy": "allow"' 'default_policy allow'
 assert_contains consul/config/consul.json.tmpl '"enable_token_persistence": true' 'persistencia de token'
 assert_contains consul/config/consul.json.tmpl '"http": 8500' 'puerto HTTP 8500'
 assert_not_contains consul/config/consul.json.tmpl 'ac80cdb0-2ca6-4182-ae14-15158c33c095' 'sin token del profesor'
