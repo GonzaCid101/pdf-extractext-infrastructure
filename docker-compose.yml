@@ -1,6 +1,8 @@
 name: pdf-extractext
 
-# Infraestructura de PDF Extractext.
+# ==============================================================================
+# 1. SERVICIOS BASE DE INFRAESTRUCTURA (Consul, Traefik, MongoDB)
+# ==============================================================================
 
 services:
   consul:
@@ -79,6 +81,10 @@ services:
     networks:
       - services
 
+  # ==============================================================================
+  # 2. MICROSERVICIOS DE LA APLICACIÓN (API, Extraction, Persistence)
+  # ==============================================================================
+
   api:
     build: ${API_CONTEXT:-../pdf-extractext-api}
     image: pdf-extractext-api:${API_TAG:-dev}
@@ -114,7 +120,7 @@ services:
       persistence:
         condition: service_healthy
       traefik:
-        condition: service_started 
+        condition: service_started
       consul-seed:
         condition: service_completed_successfully
     networks:
@@ -204,7 +210,7 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:-dev}
     deploy:
       resources:
-        limits: 
+        limits:
           cpus: "1.0"
           memory: 1G
     volumes:
@@ -218,6 +224,26 @@ services:
       retries: 5
       start_period: 15s
 
+
+  # 3. HERRAMIENTAS OPCIONALES (Cliente Web de Docker - Portainer CE)
+  # Levantar con: make portainer  o  docker compose --profile tools up -d portainer
+  # ==============================================================================
+
+  portainer:
+    image: portainer/portainer-ce:2.21.5-alpine
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    profiles:
+      - tools
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    networks:
+      - services
+    ports:
+      - "127.0.0.1:9000:9000"
+
 networks:
   services: # Traefik, API, Extraction, Persistence
   data:     # MongoDB y quienes acceden a sus datos (Persistence)
@@ -227,3 +253,5 @@ volumes:
     name: pdf-extractext-mongo-data
   consul_data:
     name: pdf-extractext-consul-data
+  portainer_data:
+    name: pdf-extractext-portainer-data

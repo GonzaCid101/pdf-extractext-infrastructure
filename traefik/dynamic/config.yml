@@ -1,4 +1,4 @@
-# Config dinámica de Traefik: dashboard y certificados TLS (mkcert).
+# Config dinámica de Traefik: dashboard, TLS y middlewares de resiliencia.
 # Los routers de servicios se publican por Tags de Consul (provider consulCatalog).
 http:
   routers:
@@ -7,6 +7,19 @@ http:
       service: "api@internal"
       # El dashboard solo vive en la red interna: el :443 queda exclusivo de la API.
       entryPoints: ["internal"]
+
+  middlewares:
+    # Patrón de Resiliencia: Rate Limit en el borde público (protección contra picos de saturación)
+    rate-limit:
+      rateLimit:
+        average: 50
+        burst: 25
+        period: 1s
+
+    # Patrón de Resiliencia: Circuit Breaker (abre el circuito si los errores 5xx superan el 25%)
+    circuit-breaker:
+      circuitBreaker:
+        expression: "ResponseCodeRatio(500, 600, 0, 600) > 0.25"
 
 tls:
   certificates:
