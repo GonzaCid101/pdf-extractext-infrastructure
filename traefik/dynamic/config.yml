@@ -3,7 +3,7 @@
 http:
   routers:
     traefik-dashboard:
-      rule: "Host(`traefik.pdf-extractext.localhost`)"
+      rule: "Host(`traefik.pdf-extractext.localhost`) || Host(`localhost`)"
       service: "api@internal"
       # El dashboard solo vive en la red interna: el :443 queda exclusivo de la API.
       entryPoints: ["internal"]
