@@ -52,7 +52,7 @@ for name in ("api", "extraction", "persistence"):
     check(str(env.get("CONSUL_ENABLED")) == "true", f"{name}: CONSUL_ENABLED=true")
     check(bool(env.get("SERVICE_NAME")), f"{name}: SERVICE_NAME")
     if name == "api":
-        check(str(env.get("PORT")) == "8000", "api: PORT=8000")
+        check(str(env.get("PORT")) == ":8000", "api: PORT=:8000")
         check(not env.get("SERVICE_PORT"), "api: sin SERVICE_PORT (puerto unificado)")
     else:
         check(bool(env.get("SERVICE_PORT")), f"{name}: SERVICE_PORT")
