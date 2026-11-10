@@ -87,8 +87,8 @@ for name in ("api", "extraction"):
     )
 
 check(
-    services.get("api", {}).get("stop_grace_period") == "20s",
-    "api: stop_grace_period 20s",
+    services.get("api", {}).get("stop_grace_period") == "55s",
+    "api: stop_grace_period 55s",
 )
 check(
     services.get("extraction", {}).get("stop_grace_period") == "35s",

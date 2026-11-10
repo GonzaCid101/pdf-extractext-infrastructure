@@ -80,7 +80,8 @@ escalado horizontal controlado:
 - **Restricciones aceptadas por diseño:** el borde no declara healthcheck HTTP
   propio ni `forwardingTimeouts` (D20, `FIND-035`); la exclusión de réplicas
   degradadas la hacen los checks HTTP de Consul (`consulCatalog` solo enruta
-  instancias `passing`) más el drenaje de 5 s previo al apagado en `SIGTERM`.
+  instancias `passing`) más el drenaje de 5 s previo al apagado en `SIGTERM`
+  y un `ShutdownWithTimeout(45s)` que cubre extracción + persistencia en vuelo.
 
 ### 2.2 Escalabilidad horizontal de Extraction (D3, D10)
 
@@ -171,7 +172,7 @@ las corridas de carga quedan pendientes (§6).
 | Límite de entrada | `MAX_FILE_SIZE_MB=16` (bajo el umbral de spool de fasthttp) | `FIND-030` |
 | Prop. de errores | 4xx/503 del extractor propagados con `Retry-After`; RFC 9457 en los 3 servicios | `FIND-012`/`FIND-015`; D17 |
 | Correlación | `X-Request-ID` generado y propagado a todos los upstreams | `FIND-014` |
-| Contenedores | API y Persistence nonroot; `stop_grace_period` 35 s (extraction) / 15 s | `FIND-032`/`FIND-033`/`FIND-034` |
+| Contenedores | API y Persistence nonroot; `stop_grace_period` 55 s (api) / 35 s (extraction) / 20 s (persistence) | `FIND-032`/`FIND-033`/`FIND-034` |
 | Superficie de ataque | Dashboard de Traefik restringido al entrypoint interno | `FIND-036` |
 | Validación de contratos | `/extract` rechaza respuesta incompleta del extractor (502); `EXTRACTION_HOST` configurable | `INT-01` |
 | Persistencia | `POST /documents` valida invariantes (400/422) | `INT-02`; tests de contrato |

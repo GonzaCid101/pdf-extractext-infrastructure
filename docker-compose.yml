@@ -105,8 +105,8 @@ services:
         limits: # tope del TP
           cpus: "1.0"
           memory: 512M
-    # > shutdown de 10s de la API + 5s de deregistro: drena requests antes del SIGKILL.
-    stop_grace_period: 20s
+    # > 5s de deregistro + 45s de shutdown (30s extractor + 10s persistencia): drena antes del SIGKILL.
+    stop_grace_period: 55s
     healthcheck:
       # Exec sin shell: la imagen distroless no tiene curl/wget.
       test: ["CMD", "/healthprobe"]
