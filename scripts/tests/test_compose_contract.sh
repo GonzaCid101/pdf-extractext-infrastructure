@@ -51,7 +51,11 @@ for name in ("api", "extraction", "persistence"):
     check(bool(env.get("CONSUL_HTTP_TOKEN")), f"{name}: CONSUL_HTTP_TOKEN")
     check(str(env.get("CONSUL_ENABLED")) == "true", f"{name}: CONSUL_ENABLED=true")
     check(bool(env.get("SERVICE_NAME")), f"{name}: SERVICE_NAME")
-    check(bool(env.get("SERVICE_PORT")), f"{name}: SERVICE_PORT")
+    if name == "api":
+        check(str(env.get("PORT")) == "8000", "api: PORT=8000")
+        check(not env.get("SERVICE_PORT"), "api: sin SERVICE_PORT (puerto unificado)")
+    else:
+        check(bool(env.get("SERVICE_PORT")), f"{name}: SERVICE_PORT")
     check(bool(env.get("SERVICE_HEALTH_PATH")), f"{name}: SERVICE_HEALTH_PATH")
     check(
         services[name].get("depends_on", {}).get("consul-seed", {}).get("condition")
@@ -76,6 +80,10 @@ for name in ("api", "extraction", "persistence"):
     for key in kv_keys:
         check(key not in env, f"{name}: {key} no está en environment (vive en KV)")
 
+check(
+    any(str(item).startswith("/tmp:size=64m") for item in (services.get("api", {}).get("tmpfs") or [])),
+    "api: tmpfs /tmp de 64m para el spool",
+)
 check("MONGO_URI" in env_of("persistence"), "persistence: MONGO_URI por entorno")
 check("WEB_CONCURRENCY" in env_of("extraction"), "extraction: WEB_CONCURRENCY por entorno")
 
