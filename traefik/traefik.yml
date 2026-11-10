@@ -26,11 +26,6 @@ providers:
       address: http://consul:8500
     exposedByDefault: false # solo se enrutan servicios con Tags explícitos
     refreshInterval: 5s
-  docker:
-    endpoint: "unix:///var/run/docker.sock"
-    watch: true
-    exposedByDefault: false # los servicios se exponen solo con labels explícitos
-    network: pdf-extractext_services
   file:
     # Config dinámica (routers/middlewares/TLS) en traefik/dynamic/.
     directory: /etc/traefik/dynamic

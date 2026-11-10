@@ -7,6 +7,16 @@ http:
       service: "api@internal"
       # El dashboard solo vive en la red interna: el :443 queda exclusivo de la API.
       entryPoints: ["internal"]
+    consul:
+      rule: "Host(`consul.pdf-extractext.localhost`)"
+      service: "consul"
+      entryPoints: ["internal"]
+
+  services:
+    consul:
+      loadBalancer:
+        servers:
+          - url: "http://consul:8500"
 
   middlewares:
     # Patrón de Resiliencia: Rate Limit en el borde (protección contra DoS / inundaciones).
