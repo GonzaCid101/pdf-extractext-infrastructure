@@ -140,10 +140,16 @@ repos de los servicios.
   `API_TAG`; red `services` únicamente (sin acceso a `data`); expone `:8000`
   solo a la red interna (no publicado al host).
 - Env de conexión inyectadas: `CONSUL_HTTP_ADDR=consul:8500`,
-  `CONSUL_HTTP_TOKEN`, `CONSUL_ENABLED=true`, `SERVICE_NAME`, `SERVICE_PORT` y
-  `SERVICE_HEALTH_PATH`. Los tunables y las URLs internas
+  `CONSUL_HTTP_TOKEN`, `CONSUL_ENABLED=true`, `SERVICE_NAME`, `PORT` y
+  `SERVICE_HEALTH_PATH`. `PORT` es la única fuente del puerto: alimenta el
+  listener Fiber, el health check y el registro en Consul (sin
+  `SERVICE_PORT`). Los tunables y las URLs internas
   (`EXTRACTION_URL`, `PERSISTENCE_URL`, `MAX_FILE_SIZE_MB`, etc.) se leen del
-  KV (D8); el router público lo publica la API en `Tags` al registrarse.
+  KV (D8); el router público lo publica la API en `Tags` al registrarse,
+  incluido `rate-limit@file`.
+- La API monta `tmpfs /tmp` (64 MB) para el spool temporal del SHA-256 en
+  `/upload-pdf`; la imagen distroless nonroot nunca escribe en el filesystem de
+  la capa.
 - Router público `Host(pdf-extractext.localhost)` en entrypoint `https` con
   TLS (mkcert); la redirección :80→:443 es global en la config estática, por lo
   que no se define un router HTTP redundante.

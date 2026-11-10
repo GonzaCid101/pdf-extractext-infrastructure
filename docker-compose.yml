@@ -92,8 +92,10 @@ services:
       CONSUL_HTTP_TOKEN: ${CONSUL_HTTP_TOKEN:?falta CONSUL_HTTP_TOKEN en .env}
       CONSUL_ENABLED: "true"
       SERVICE_NAME: api
-      SERVICE_PORT: "8000"
+      PORT: ":8000"
       SERVICE_HEALTH_PATH: /
+    tmpfs:
+      - /tmp:size=64m,mode=1777
     deploy:
       resources:
         limits: # tope del TP
