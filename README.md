@@ -17,12 +17,7 @@ MongoDB ◀─ solo Persistence; 27017 no publicado; volumen nombrado
 ```
 
 La API es el único entrypoint público (`https://pdf-extractext.localhost`).
-Consume Extraction vía Traefik :8090 y Persistence por el router interno.
-
-> **Estado (Paso 1):** Consul, el KV y el provider `consulCatalog` ya están
-> operativos. El registro de `api`, `extraction` y `persistence` y la lectura
-> del KV se implementan en los Pasos 2–4; hasta entonces el smoke E2E completo
-> no aplica y se usa `SMOKE_PHASE=infra make smoke`.
+Consume Extraction y Persistence vía Traefik `:8090` (balanceados con el provider `consulCatalog`).
 
 ## Requisitos
 
@@ -46,7 +41,7 @@ make certs                  # TLS local con mkcert (una vez por máquina)
 make up                     # valida contextos y levanta todo
 make consul-check           # leader de Consul + KV cargado
 make test-infra             # suite de contrato de infraestructura
-make smoke                  # smoke E2E (cuando los Pasos 2–4 estén listos)
+make smoke                  # smoke E2E completo del stack
 make down
 make logs / make ps         # utilidades
 ```
@@ -60,21 +55,19 @@ SMOKE_PHASE=infra make smoke
 
 ## Consul y KV
 
-- **UI interna:** solo accesible por el entrypoint `internal` de Traefik:
-
+- **Consul Web UI (inspección gráfica):**
+  Por seguridad y aislamiento de red, el puerto `:8500` no está expuesto de forma permanente al host. Para abrir la interfaz web en tu navegador:
   ```bash
-  docker run --rm --network pdf-extractext_services curlimages/curl:8.10.1 \
-    -H 'Host: consul.pdf-extractext.localhost' http://traefik:8090/ui/
+  make consul-ui
   ```
+  Abre un túnel temporal hacia `http://localhost:8500/ui/` y muestra el token de acceso configurado. Al terminar, presionar `Ctrl+C` para cerrar el túnel.
 
-- **Leer el KV:**
-
+- **Leer el KV store:**
   ```bash
   docker compose exec consul consul kv get -recurse pdf-extractext/config/
   ```
 
 - **Cargar/forzar el seed:** `make kv-seed` (envuelve `scripts/consul-kv-seed.sh`):
-
   ```bash
   make kv-seed                    # no pisa claves existentes
   SEED_FORCE=true make kv-seed    # sobrescribe con consul/seed/keys.env
@@ -82,7 +75,6 @@ SMOKE_PHASE=infra make smoke
 
 - **Rotar el token:** reemplazá `CONSUL_HTTP_TOKEN` en `.env` y recreá el
   volumen de Consul (el token queda persistido en `/consul/data`):
-
   ```bash
   docker compose rm -sf consul consul-seed
   docker volume rm pdf-extractext-consul-data
@@ -90,7 +82,6 @@ SMOKE_PHASE=infra make smoke
   ```
 
 - **Resetear el volumen de Consul:**
-
   ```bash
   docker compose down
   docker volume rm pdf-extractext-consul-data
@@ -101,6 +92,7 @@ SMOKE_PHASE=infra make smoke
 - `make test` - Validación rápida sin levantar contenedores (sintaxis bash/python/js, `docker compose config -q`).
 - `make test-infra` - Suite de contrato de Consul, Traefik, KV y compose (sin stack); usa `shellcheck` si está instalado.
 - `make consul-check` - Leader, catálogo y claves del KV con el stack arriba.
+- `make consul-ui` - Abre el acceso local a la UI gráfica de Consul (http://localhost:8500/ui/).
 - `make check` - Valida `.env` y contextos de build (requerido por `make up`).
 - `make smoke` - Smoke E2E con stack levantado (requiere `make up` previo).
 

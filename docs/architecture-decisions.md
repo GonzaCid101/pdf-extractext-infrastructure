@@ -63,8 +63,9 @@ repos de los servicios.
   `X-Consul-Token`.
 - **Ruteo:** Traefik descubre routers con el provider `consulCatalog`
   (`http://consul:8500`, `refreshInterval: 5s`). Los servicios publican sus
-  reglas funcionales en `Tags`; `Meta` replica las mismas claves
-  `traefik.*` + `version` + `commit` como espejo documental y **no** enruta.
+  reglas funcionales en `Tags`; `Meta` contiene `version` y `commit` (Consul
+  solo admite caracteres `[a-zA-Z0-9_-]` en las claves de `Meta`, por lo que
+  las claves `traefik.*` con puntos van exclusivamente en `Tags`).
 - **Identidad:** `ID = <servicio>-<hostname>` (único por réplica), `Address`
   con la IP de la red `services` y check HTTP propio con
   `DeregisterCriticalServiceAfter: 1m`.

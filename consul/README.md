@@ -25,9 +25,22 @@ token de desarrollo vive en `.env` (`CONSUL_HTTP_TOKEN`) y nunca se versiona; el
 entrypoint lo inyecta en `/tmp/consul.json` porque el bind mount de
 `/consul/config` es de solo lectura.
 
-## UI
+## Web UI
 
-La UI se expone solo por el entrypoint interno de Traefik:
+Por diseño seguro y aislamiento de red, el puerto `8500` no está expuesto directamente en el host.
+
+### Acceso local (Recomendado)
+Para interactuar con la interfaz gráfica en el navegador durante desarrollo o demostraciones:
+
+```bash
+make consul-ui
+```
+1. Abre un túnel temporal hacia **[http://localhost:8500/ui/](http://localhost:8500/ui/)**.
+2. Te muestra el `CONSUL_HTTP_TOKEN` para autenticarte (botón *Log in* arriba a la derecha).
+3. Con `Ctrl+C` se cierra el túnel manteniendo la red interna aislada.
+
+### Acceso vía red interna (Traefik)
+Internamente, Traefik enruta hacia la UI de Consul en el entrypoint privado `:8090`:
 
 ```bash
 docker run --rm --network pdf-extractext_services curlimages/curl:8.10.1 \

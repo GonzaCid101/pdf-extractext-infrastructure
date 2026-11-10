@@ -10,15 +10,17 @@ completan ejecutando el runbook manual (`audit/audit-benchmark.md` §8).
 
 ## 1. Arquitectura del Sistema
 
-Arquitectura de microservicios orquestada con Docker Compose y Traefik como API
-gateway y balanceador: **Traefik → API → Extraction & Persistence → MongoDB**.
+Arquitectura de microservicios orquestada con Docker Compose, Consul (registro
+de servicios y KV store) y Traefik como API gateway y balanceador:
+**Traefik ↔ Consul ← API → Extraction & Persistence → MongoDB**.
 
 ```
-Host :80/:443 ──► Traefik v3 (:80 redirect → :443, TLS mkcert)
+Host :80/:443 ──► Traefik v3 (:80 redirect → :443, TLS mkcert; provider consulCatalog)
                     │ red `services`
+                    ├─► consul     :8500  (registro de servicios, health checks y KV)
                     ├─► api        :8000  (solo red interna; Host pdf-extractext.localhost)
-                    │     ├─► EXTRACTION_URL  = http://traefik:8090  (entrypoint interno)
-                    │     └─► PERSISTENCE_URL = http://persistence:8002
+                    │     ├─► EXTRACTION_URL  = http://traefik:8090  (Host extraction.pdf-extractext.localhost)
+                    │     └─► PERSISTENCE_URL = http://traefik:8090  (Host persistence.pdf-extractext.localhost)
                     ├─► extraction :8001  (réplicas 1..5; Host extraction.pdf-extractext.localhost)
                     └─► persistence:8002 ─── red `data` ───► mongodb :27017 (no publicado)
 ```
@@ -45,6 +47,7 @@ escalado horizontal controlado:
 
 | Servicio | cpus | memoria | Réplicas |
 |---|---|---|---|
+| consul | 0.5 | 256M | 1 |
 | traefik | 0.5 | 512M | 1 |
 | api | 1.0 | 512M | 1 |
 | extraction | 1.0 | 1G | `EXTRACTION_REPLICAS` (1–5) |
@@ -53,23 +56,31 @@ escalado horizontal controlado:
 
 ## 2. Justificación de Decisiones Arquitectónicas Clave
 
-### 2.1 Traefik como API Gateway y Balanceador (D1, D3, D18, D20)
+### 2.1 Traefik y Consul: Descubrimiento, Configuración y Balanceo (D1, D3, D8, D18, D20)
 
-- **Integración nativa con Docker:** auto-descubre los servicios por labels y
-  actualiza rutas y balanceo al iniciar o detener contenedores, sin
-  reconfiguración manual.
-- **Configuración declarativa:** las rutas se definen como labels de Compose,
-  fáciles de versionar y revisar.
+- **Descubrimiento vía Consul Catalog (`consulCatalog`):** cada instancia de
+  `api`, `extraction` y `persistence` se auto-registra en Consul al iniciar
+  publicando sus reglas de enrutamiento en `Tags` (y un espejo documental en
+  `Meta` con `version` y `commit`) y su propio health check HTTP. Traefik
+  consulta el catálogo cada 5 s y solo enruta hacia instancias `passing`.
+- **Configuración distribuida (12-Factor):** el servicio efímero `consul-seed`
+  carga de forma idempotente las claves iniciales en `pdf-extractext/config/<servicio>/*`.
+  Los servicios leen su configuración al arrancar con precedencia
+  `env > KV > default`, mientras que los secretos (`MONGO_URI`, `CONSUL_HTTP_TOKEN`)
+  viven exclusivamente en variables de entorno.
+- **Health Gate en la API:** antes de invocar a `extraction` o `persistence`, la
+  API verifica en Consul (`GET /v1/health/service/<svc>?passing=true`) con caché
+  TTL de 3 s y política *fail-open* si Consul no responde.
 - **Gestión de TLS:** centraliza los certificados (mkcert en desarrollo) y la
   redirección HTTP → HTTPS.
 - **Dos entrypoints:** `:80`/`:443` públicos (solo la API) y un entrypoint
   `internal` en `:8090`, **no publicado** al host, para el tráfico entre
-  servicios (API → Extraction). El dashboard de Traefik se restringe a este
-  entrypoint interno y no se expone en el borde (D1, `FIND-036`).
+  servicios (API → Extraction y API → Persistence) y las UIs internas de
+  Traefik y Consul (D1, D8, `FIND-036`).
 - **Restricciones aceptadas por diseño:** el borde no declara healthcheck HTTP
   propio ni `forwardingTimeouts` (D20, `FIND-035`); la exclusión de réplicas
-  degradadas la hace el healthcheck de Docker y los timeouts efectivos los
-  impone el cliente de la API. El nombre de proyecto es fijo (D18).
+  degradadas la hacen los checks HTTP de Consul (`consulCatalog` solo enruta
+  instancias `passing`) más el drenaje de 5 s previo al apagado en `SIGTERM`.
 
 ### 2.2 Escalabilidad horizontal de Extraction (D3, D10)
 
