@@ -26,7 +26,7 @@ render_template() {
 	printf '%s\n' "$out"
 }
 
-TOOL= TARGET= LOAD= THROUGHPUT= SUCCESS= P50= P90= P95= DESC= OUT_DIR="$OUT_DIR"
+TOOL="" TARGET="" LOAD="" THROUGHPUT="" SUCCESS="" P50="" P90="" P95="" DESC=""
 
 while [[ $# -gt 0 ]]; do
 	case "$1" in
@@ -70,7 +70,11 @@ cpu_limit() {
 	id="$(first_id "$1")"
 	[[ -n "$id" ]] || { echo "—"; return; }
 	nano="$(docker inspect "$id" --format '{{.HostConfig.NanoCpus}}')"
-	[[ "$nano" == "0" || -z "$nano" ]] && echo "sin límite" || awk -v n="$nano" 'BEGIN{printf "%.2f", n/1e9}'
+	if [[ "$nano" == "0" || -z "$nano" ]]; then
+		echo "sin límite"
+	else
+		awk -v n="$nano" 'BEGIN{printf "%.2f", n/1e9}'
+	fi
 }
 
 mem_limit() {
@@ -157,6 +161,3 @@ out="$(render_template "$template_content" \
 mkdir -p "$OUT_DIR"
 printf '%s\n' "$out" > "$OUT"
 echo "Registro generado: $OUT"
-EOF
-chmod +x /home/gonzalo/facu/desarrollo-software/pdf-extractext-microservicios/pdf-extractext-infrastructure/scripts/record-run.sh
-bash -n /home/gonzalo/facu/desarrollo-software/pdf-extractext-microservicios/pdf-extractext-infrastructure/scripts/record-run.sh && echo "OK"

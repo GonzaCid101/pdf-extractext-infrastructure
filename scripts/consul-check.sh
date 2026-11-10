@@ -3,7 +3,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 [ -f .env ] || { echo "ERROR: falta .env — ejecutá: cp .env.example .env"; exit 1; }
-set -a; . ./.env; set +a
+set -a
+# shellcheck disable=SC1091
+. ./.env
+set +a
 : "${CONSUL_HTTP_TOKEN:?falta CONSUL_HTTP_TOKEN en .env}"
 
 FAILURES=0
@@ -33,8 +36,10 @@ fi
 for service in api extraction persistence; do
   if printf '%s' "$services" | grep -q "\"$service\""; then
     ok "servicio $service en el catálogo"
+  elif [ "${SMOKE_PHASE:-full}" = "infra" ]; then
+    echo "SKIP  servicio $service (fase infra)"
   else
-    echo "PENDIENTE PASO 5: servicio $service no registrado todavía"
+    fail "servicio $service ausente del catálogo"
   fi
 done
 

@@ -3,6 +3,7 @@ set -euo pipefail
 export COMPOSE_PROGRESS=plain
 cd "$(dirname "$0")/.."
 
+# shellcheck disable=SC1091
 source "$(dirname "$0")/lib/common.sh"
 
 require_cmd jq "ERROR: falta jq — requerido para validar la respuesta de /extract"
@@ -27,8 +28,15 @@ finish() {
 }
 
 ENV_REPLICAS="${EXTRACTION_REPLICAS:-}"
-set -a; . ./.env; set +a
-[ -n "$ENV_REPLICAS" ] && EXTRACTION_REPLICAS="$ENV_REPLICAS" || EXTRACTION_REPLICAS="${EXTRACTION_REPLICAS:-1}"
+set -a
+# shellcheck disable=SC1091
+. ./.env
+set +a
+if [ -n "$ENV_REPLICAS" ]; then
+  EXTRACTION_REPLICAS="$ENV_REPLICAS"
+else
+  EXTRACTION_REPLICAS="${EXTRACTION_REPLICAS:-1}"
+fi
 export EXTRACTION_REPLICAS
 
 echo "== Smoke tests: bootstrap pdf-extractext =="
@@ -82,12 +90,18 @@ check_network_isolation() {
   fi
 
   status=$(docker inspect -f '{{.State.Health.Status}}' "$(mongo_cid)" 2>/dev/null || echo missing)
-  [ "$status" = "healthy" ] && ok "3. MongoDB healthy" \
-                            || fail "3. MongoDB health status: $status"
+  if [ "$status" = "healthy" ]; then
+    ok "3. MongoDB healthy"
+  else
+    fail "3. MongoDB health status: $status"
+  fi
 
   replicas=$($COMPOSE ps -q extraction | wc -l)
-  [ "$replicas" -ge 1 ] && ok "4. Extraction running ($replicas réplica/s)" \
-                       || fail "4. Extraction sin réplicas running"
+  if [ "$replicas" -ge 1 ]; then
+    ok "4. Extraction running ($replicas réplica/s)"
+  else
+    fail "4. Extraction sin réplicas running"
+  fi
 
   c1=$(docker run --rm --network "$NET_SERVICES" "$CURL_IMG" \
     -s -o /dev/null -w '%{http_code}' --max-time 5 http://extraction:8001/health || echo 000)
@@ -110,8 +124,11 @@ check_network_isolation() {
 
   code=$(docker run --rm --network "$NET_SERVICES" "$CURL_IMG" \
     -s -o /dev/null -w '%{http_code}' --max-time 5 http://persistence:8002/health || echo 000)
-  [ "$code" = "200" ] && ok "7. Persistence /health 200 en red interna" \
-                      || fail "7. Persistence /health en red interna: HTTP $code"
+  if [ "$code" = "200" ]; then
+    ok "7. Persistence /health 200 en red interna"
+  else
+    fail "7. Persistence /health en red interna: HTTP $code"
+  fi
 
   c1=$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 http://localhost:8002/health || echo 000)
   c2=$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 http://localhost:80/documents || echo 000)
@@ -150,10 +167,13 @@ consul_api() {
 check_infra_consul() {
   local status
   status=$(docker inspect -f '{{.State.Health.Status}}' "$($COMPOSE ps -q consul)" 2>/dev/null || echo missing)
-  [ "$status" = "healthy" ] && ok "I1. Consul healthy" \
-                            || fail "I1. Consul health status: $status"
+  if [ "$status" = "healthy" ]; then
+    ok "I1. Consul healthy"
+  else
+    fail "I1. Consul health status: $status"
+  fi
 
-  if bash scripts/consul-check.sh >/dev/null; then
+  if SMOKE_PHASE="$SMOKE_PHASE" bash scripts/consul-check.sh >/dev/null; then
     ok "I2. Consul con leader y KV cargado"
   else
     fail "I2. consul-check falló (leader o KV incompletos)"
@@ -165,9 +185,11 @@ check_traefik_consulcatalog() {
   overview=$(docker run --rm --network "$NET_SERVICES" "$CURL_IMG" \
     -s --max-time 5 -H "Host: traefik.pdf-extractext.localhost" \
     http://traefik:8090/api/overview || true)
-  printf '%s' "$overview" | grep -qi 'consulcatalog' \
-    && ok "I3. Traefik con provider consulCatalog" \
-    || fail "I3. Traefik sin provider consulCatalog"
+  if printf '%s' "$overview" | grep -qi 'consulcatalog'; then
+    ok "I3. Traefik con provider consulCatalog"
+  else
+    fail "I3. Traefik sin provider consulCatalog"
+  fi
 
   if $COMPOSE logs traefik 2>&1 | grep -Eiq 'consul.*(403|permission denied|acl not found)'; then
     fail "I4. Traefik con errores de ACL contra Consul"
@@ -182,8 +204,10 @@ check_catalog_pending() {
   for service in api extraction persistence; do
     if printf '%s' "$services" | grep -q "\"$service\""; then
       ok "I5. $service registrado en el catálogo"
+    elif [ "$SMOKE_PHASE" = "infra" ]; then
+      echo "SKIP  I5. $service (fase infra)"
     else
-      echo "PENDIENTE PASO 5: $service no registrado todavía"
+      fail "I5. $service no registrado en el catálogo"
     fi
   done
 }
@@ -250,13 +274,19 @@ check_e2e_extract() {
 }
 
 check_persistence() {
-  local indexes MARKER MONGO found
+  local collection indexes MARKER found
+  # Lee la colección configurada en Consul KV (default: documents).
+  collection=$(consul_api '/v1/kv/pdf-extractext/config/persistence/MONGO_COLLECTION_NAME?raw' || true)
+  collection="${collection:-documents}"
   indexes=$(docker exec "$(mongo_cid)" mongosh --quiet \
     -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" \
     --authenticationDatabase admin pdf_extractext \
-    --eval 'db.pdf_documents.getIndexes().filter(i => i.name === "checksum_1" && i.unique === true).length')
-  [ "$indexes" = "1" ] && ok "12. índice único checksum_1 creado por Persistence" \
-                        || fail "12. índice checksum_1 no encontrado o no único (match: $indexes)"
+    --eval "db.getCollection('$collection').getIndexes().filter(i => i.name === 'checksum_1' && i.unique === true).length")
+  if [ "$indexes" = "1" ]; then
+    ok "12. índice único checksum_1 creado por Persistence (colección: $collection)"
+  else
+    fail "12. índice checksum_1 no encontrado o no único en $collection (match: $indexes)"
+  fi
 
   MARKER="smoke-$(date +%s)"
   MONGO() { docker exec "$(mongo_cid)" mongosh --quiet \
@@ -285,8 +315,25 @@ check_git_hygiene() {
   git ls-files --error-unmatch .env >/dev/null 2>&1 && { dirty=1; echo "     .env está versionado"; }
   git ls-files | grep -Eq '\.pem$' && { dirty=1; echo "     hay certificados/claves TLS versionados"; }
   git ls-files | grep -Eq '(^|/)(mongodata|.*-data)/' && { dirty=1; echo "     hay datos runtime versionados"; }
-  [ "$dirty" = "0" ] && ok "14. cero secretos/datos versionados" \
-                      || fail "14. hay secretos o datos runtime versionados"
+  if [ "$dirty" = "0" ]; then
+    ok "14. cero secretos/datos versionados"
+  else
+    fail "14. hay secretos o datos runtime versionados"
+  fi
+}
+
+wait_catalog_services() {
+  local services
+  for _ in $(seq 1 15); do
+    services=$(consul_api /v1/catalog/services 2>/dev/null || true)
+    if printf '%s' "$services" | grep -q '"api"' \
+      && printf '%s' "$services" | grep -q '"extraction"' \
+      && printf '%s' "$services" | grep -q '"persistence"'; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
 }
 
 if [ "$SMOKE_PHASE" = "infra" ]; then
@@ -296,10 +343,14 @@ if [ "$SMOKE_PHASE" = "infra" ]; then
   finish
 fi
 
+check_stack
 wait_dashboard || true
 wait_mongo_healthy || true
+wait_catalog_services || true
 
-check_stack
+check_infra_consul
+check_traefik_consulcatalog
+check_catalog_pending
 check_network_isolation
 check_e2e_extract
 check_persistence
