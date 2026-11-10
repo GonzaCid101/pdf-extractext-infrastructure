@@ -9,14 +9,22 @@ http:
       entryPoints: ["internal"]
 
   middlewares:
-    # Patrón de Resiliencia: Rate Limit en el borde público (protección contra picos de saturación)
+    # Patrón de Resiliencia: Rate Limit en el borde (protección contra DoS / inundaciones).
+    # IMPORTANTE:
+    # 1. Al referenciar este middleware desde tags de Consul, debe usarse el sufijo:
+    #    "rate-limit@file" (ya que proviene del provider 'file').
+    # 2. Benchmark del TP (consigna.md): Vegeta inyecta 50 req/s sostenidas y k6 sube a 100 VUs.
+    #    Se fijan umbrales holgados (average: 150 req/s, burst: 100) para evitar que Traefik
+    #    devuelva 429 Too Many Requests y tape la medición real del backpressure de Extraction.
     rate-limit:
       rateLimit:
-        average: 50
-        burst: 25
+        average: 150
+        burst: 100
         period: 1s
 
-    # Patrón de Resiliencia: Circuit Breaker (abre el circuito si los errores 5xx superan el 25%)
+    # Patrón de Resiliencia: Circuit Breaker.
+    # Referenciar desde tags de Consul como: "circuit-breaker@file".
+    # Abre el circuito si el ratio de errores 5xx del backend supera el 25%.
     circuit-breaker:
       circuitBreaker:
         expression: "ResponseCodeRatio(500, 600, 0, 600) > 0.25"
