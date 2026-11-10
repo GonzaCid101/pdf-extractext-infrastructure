@@ -3,7 +3,7 @@ DOMAIN  := pdf-extractext.localhost
 # Propaga EXTRACTION_REPLICAS (env o `make up EXTRACTION_REPLICAS=N`) al stack.
 export EXTRACTION_REPLICAS
 
-.PHONY: check test test-infra consul-check consul-ui traefik-ui portainer certs up up-infra down build logs ps smoke record-run load-k6 load-vegeta kv-seed scan-security
+.PHONY: check test test-infra consul-check consul-ui traefik-ui portainer certs up up-infra down build logs ps smoke record-run load-k6 load-vegeta kv-seed scan-security postman
 
 # certs genera el certificado TLS local con mkcert (nunca versionar).
 certs:
@@ -156,3 +156,12 @@ scan-security:
 			-v /tmp/trivy-cache:/root/.cache \
 			aquasec/trivy image --severity HIGH,CRITICAL "$$img" || true; \
 	done
+
+# Ejecuta la suite de pruebas de Postman con Newman.
+postman: check
+	@echo "== Ejecutando suite de pruebas de Postman con Newman =="
+	@cd postman && npx --yes newman run pdf-extractext.postman_collection.json \
+		-e pdf-extractext-local.postman_environment.json \
+		--insecure \
+		--reporters cli
+

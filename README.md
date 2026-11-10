@@ -95,6 +95,7 @@ SMOKE_PHASE=infra make smoke
 - `make consul-ui` - Abre el acceso local a la UI gráfica de Consul (http://localhost:8500/ui/).
 - `make check` - Valida `.env` y contextos de build (requerido por `make up`).
 - `make smoke` - Smoke E2E con stack levantado (requiere `make up` previo).
+- `make postman` - Suite de pruebas del cliente Postman ejecutada con Newman (headless).
 
 Dashboard de Traefik: <https://traefik.pdf-extractext.localhost>
 
