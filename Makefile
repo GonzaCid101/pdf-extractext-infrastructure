@@ -3,7 +3,7 @@ DOMAIN  := pdf-extractext.localhost
 # Propaga EXTRACTION_REPLICAS (env o `make up EXTRACTION_REPLICAS=N`) al stack.
 export EXTRACTION_REPLICAS
 
-.PHONY: check test test-infra consul-check certs up down build logs ps smoke record-run load-k6 load-vegeta kv-seed
+.PHONY: check test test-infra consul-check consul-ui certs up down build logs ps smoke record-run load-k6 load-vegeta kv-seed
 
 # certs genera el certificado TLS local con mkcert (nunca versionar).
 certs:
@@ -86,8 +86,17 @@ test-infra:
 consul-check:
 	bash scripts/consul-check.sh
 
+# consul-ui abre un túnel temporal hacia la UI de Consul en http://localhost:8500/ui/ (Ctrl+C para cerrar).
+consul-ui:
+	@echo "Consul UI disponible en: http://localhost:8500/ui/"
+	@echo "Token ACL: $$(grep -E '^CONSUL_HTTP_TOKEN=' .env 2>/dev/null | cut -d= -f2-)"
+	@echo "Presioná Ctrl+C para cerrar el acceso."
+	@docker run --rm -it --network pdf-extractext_services -p 8500:8500 alpine/socat TCP-LISTEN:8500,fork TCP:consul:8500
+
 up: check
-	$(COMPOSE) up -d --build --remove-orphansdown:
+	$(COMPOSE) up -d --build --remove-orphans
+
+down:
 	$(COMPOSE) down
 
 build: check
